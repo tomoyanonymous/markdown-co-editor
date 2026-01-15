@@ -13,6 +13,9 @@ export interface Comment {
   resolved: boolean;
   resolvedBy?: string;  // Email of user who resolved the comment
   resolvedAt?: number;  // Timestamp when resolved
+  inReplyTo?: string;   // ID of parent comment for threading
+  editedAt?: number;    // Timestamp when last edited
+  editedBy?: string;    // Email of user who last edited
 }
 
 export interface CommentDatabase {

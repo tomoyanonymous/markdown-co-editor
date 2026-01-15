@@ -20,6 +20,8 @@ function App() {
     endLine: number;
     endColumn: number;
   } | null>(null);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncMessage, setSyncMessage] = useState<string>('');
 
   // Load current user info
   useEffect(() => {
@@ -95,18 +97,28 @@ function App() {
       .catch(err => console.error('Failed to load comments:', err));
   }, [currentFile]);
 
-  const handleAddComment = async (text: string) => {
-    if (!selectedRange) return;
+  const handleAddComment = async (text: string, inReplyTo?: string) => {
+    if (!selectedRange && !inReplyTo) return;
 
     // Validate and sanitize display name
     const authorName = displayName.trim() || currentUser?.name || currentUser?.email || 'Anonymous';
 
     const newComment = {
       markdownFile: currentFile,
-      ...selectedRange,
+      ...(inReplyTo ? {} : selectedRange),
       text,
       resolved: false,
       author: authorName,
+      ...(inReplyTo && { 
+        inReplyTo,
+        // For replies, copy the parent comment's range
+        ...comments.find(c => c.id === inReplyTo)?.startLine && {
+          startLine: comments.find(c => c.id === inReplyTo)!.startLine,
+          startColumn: comments.find(c => c.id === inReplyTo)!.startColumn,
+          endLine: comments.find(c => c.id === inReplyTo)!.endLine,
+          endColumn: comments.find(c => c.id === inReplyTo)!.endColumn,
+        }
+      })
     };
 
     try {
@@ -118,9 +130,31 @@ function App() {
       
       const savedComment = await res.json();
       setComments([...comments, savedComment]);
-      setSelectedRange(null);
+      if (!inReplyTo) {
+        setSelectedRange(null);
+      }
     } catch (err) {
       console.error('Failed to add comment:', err);
+    }
+  };
+
+  const handleEditComment = async (id: string, text: string) => {
+    try {
+      const comment = comments.find(c => c.id === id);
+      if (!comment) return;
+
+      const response = await fetch(`/api/comments/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...comment, text }),
+      });
+
+      const updatedComment = await response.json();
+      setComments(comments.map(c => 
+        c.id === id ? updatedComment : c
+      ));
+    } catch (err) {
+      console.error('Failed to edit comment:', err);
     }
   };
 
@@ -156,6 +190,34 @@ function App() {
     }
   };
 
+  const handleSync = async () => {
+    setIsSyncing(true);
+    setSyncMessage('');
+    
+    try {
+      const response = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      const result = await response.json();
+      
+      if (response.ok) {
+        setSyncMessage(result.message);
+        setTimeout(() => setSyncMessage(''), 3000);
+      } else {
+        setSyncMessage(`Error: ${result.error}`);
+        setTimeout(() => setSyncMessage(''), 5000);
+      }
+    } catch (err) {
+      console.error('Failed to sync:', err);
+      setSyncMessage('Failed to sync with git repository');
+      setTimeout(() => setSyncMessage(''), 5000);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return (
     <div className="app">
       <header className="app-header">
@@ -186,6 +248,18 @@ function App() {
               ))}
             </select>
           </div>
+          <button 
+            className="sync-button"
+            onClick={handleSync}
+            disabled={isSyncing}
+          >
+            {isSyncing ? 'Syncing...' : 'Sync'}
+          </button>
+          {syncMessage && (
+            <div className={`sync-message ${syncMessage.includes('Error') ? 'error' : 'success'}`}>
+              {syncMessage}
+            </div>
+          )}
         </div>
       </header>
       
@@ -209,6 +283,7 @@ function App() {
             currentUser={currentUser}
             displayName={displayName}
             onAddComment={handleAddComment}
+            onEditComment={handleEditComment}
             onResolveComment={handleResolveComment}
             onDeleteComment={handleDeleteComment}
           />

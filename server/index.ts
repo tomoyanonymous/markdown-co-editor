@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { execFile } from 'child_process';
+import { execFile, exec } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
@@ -10,6 +10,7 @@ import type { Comment, CommentDatabase, RenderRequest, RenderResponse, UserInfo 
 import { cloudflareAccessAuth, requireAuth } from './auth.js';
 
 const execFileAsync = promisify(execFile);
+const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -129,7 +130,7 @@ app.post('/api/comments', requireAuth, async (req, res) => {
   }
 });
 
-// Update a comment (e.g., resolve/unresolve)
+// Update a comment (e.g., resolve/unresolve, edit text)
 app.put('/api/comments/:id', requireAuth, async (req, res) => {
   try {
     const db = await readComments();
@@ -150,6 +151,12 @@ app.put('/api/comments/:id', requireAuth, async (req, res) => {
       // If unresolving, clear resolver info
       delete updatedComment.resolvedBy;
       delete updatedComment.resolvedAt;
+    }
+    
+    // If editing text, add edit info
+    if (req.body.text !== undefined && req.body.text !== db.comments[index].text) {
+      updatedComment.editedBy = req.user!.email;
+      updatedComment.editedAt = Date.now();
     }
     
     db.comments[index] = updatedComment;
@@ -250,6 +257,76 @@ app.get('/api/files', async (_req, res) => {
     res.json(mdFiles);
   } catch (error) {
     res.status(500).json({ error: 'Failed to list files' });
+  }
+});
+
+// Git sync endpoint
+app.post('/api/sync', requireAuth, async (req, res) => {
+  try {
+    const gitRepoUrl = process.env.GIT_REPO_URL;
+    const gitUsername = process.env.GIT_USERNAME;
+    const gitAccessToken = process.env.GIT_ACCESS_TOKEN;
+    
+    if (!gitRepoUrl || !gitUsername || !gitAccessToken) {
+      res.status(400).json({ 
+        error: 'Git sync not configured. Please set GIT_REPO_URL, GIT_USERNAME, and GIT_ACCESS_TOKEN environment variables.' 
+      });
+      return;
+    }
+    
+    // Configure git credentials
+    const authenticatedUrl = gitRepoUrl.replace('https://', `https://${gitUsername}:${gitAccessToken}@`);
+    
+    // Configure git user if not already configured
+    try {
+      await execAsync('git config user.email', { cwd: DATA_DIR });
+    } catch {
+      await execAsync('git config user.email "markdown-co-editor@automated"', { cwd: DATA_DIR });
+      await execAsync('git config user.name "Markdown Co-Editor"', { cwd: DATA_DIR });
+    }
+    
+    // Check if git repo is initialized
+    try {
+      await execAsync('git rev-parse --git-dir', { cwd: DATA_DIR });
+    } catch {
+      // Initialize git repo if not exists
+      await execAsync('git init', { cwd: DATA_DIR });
+      await execAsync(`git remote add origin ${authenticatedUrl}`, { cwd: DATA_DIR });
+    }
+    
+    // Stage changes
+    await execAsync('git add comments.json', { cwd: DATA_DIR });
+    
+    // Check if there are changes to commit
+    const { stdout: statusOutput } = await execAsync('git status --porcelain', { cwd: DATA_DIR });
+    
+    if (!statusOutput.trim()) {
+      res.json({ 
+        success: true, 
+        message: 'No changes to sync',
+        synced: false
+      });
+      return;
+    }
+    
+    // Commit changes
+    const commitMessage = `Update comments by ${req.user!.email} at ${new Date().toISOString()}`;
+    await execAsync(`git commit -m "${commitMessage}"`, { cwd: DATA_DIR });
+    
+    // Push changes
+    await execAsync(`git push ${authenticatedUrl} HEAD:main`, { cwd: DATA_DIR });
+    
+    res.json({ 
+      success: true, 
+      message: 'Changes synced successfully',
+      synced: true
+    });
+  } catch (error) {
+    console.error('Git sync error:', error);
+    res.status(500).json({ 
+      error: 'Failed to sync with git repository',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 
