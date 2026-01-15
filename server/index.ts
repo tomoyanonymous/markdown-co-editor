@@ -17,6 +17,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+const GIT_PULL_INTERVAL = parseInt(process.env.GIT_PULL_INTERVAL || '300000', 10); // Default 5 minutes (300000ms)
 
 // Middleware
 app.use(cors());
@@ -383,6 +384,67 @@ app.post('/api/sync', requireAuth, async (req, res) => {
   }
 });
 
+// Periodic git pull function
+async function performGitPull(): Promise<void> {
+  const gitRepoUrl = process.env.GIT_REPO_URL;
+  const gitUsername = process.env.GIT_USERNAME;
+  const gitAccessToken = process.env.GIT_ACCESS_TOKEN;
+  
+  // Skip if git is not configured
+  if (!gitRepoUrl || !gitUsername || !gitAccessToken) {
+    return;
+  }
+  
+  // Skip if sync is in progress
+  if (isSyncInProgress) {
+    console.log('Skipping git pull: sync operation in progress');
+    return;
+  }
+  
+  try {
+    // Check if git repo is initialized
+    try {
+      await execAsync('git rev-parse --git-dir', { cwd: DATA_DIR });
+    } catch {
+      // Git repo not initialized, skip pull
+      return;
+    }
+    
+    console.log('Performing automatic git pull...');
+    
+    // Construct authenticated URL for pull
+    const urlParts = gitRepoUrl.replace('https://', '').split('/');
+    const authenticatedUrl = `https://${gitUsername}:${gitAccessToken}@${urlParts.join('/')}`;
+    
+    // Detect the current branch name
+    const { stdout: branchOutput } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: DATA_DIR });
+    const currentBranch = branchOutput.trim() || 'main';
+    
+    // Pull changes from remote
+    const { stdout, stderr } = await execAsync(`git pull ${authenticatedUrl} ${currentBranch}`, { cwd: DATA_DIR });
+    
+    if (stdout.includes('Already up to date') || stdout.includes('Already up-to-date')) {
+      console.log('Git pull: Already up to date');
+    } else {
+      console.log('Git pull completed:', stdout.trim());
+      
+      // Reload comments from file after pull
+      try {
+        await fs.readFile(COMMENTS_FILE, 'utf-8');
+        console.log('Comments reloaded after pull');
+      } catch (error) {
+        console.error('Error reloading comments after pull:', error);
+      }
+    }
+    
+    if (stderr && !stderr.includes('From https://')) {
+      console.warn('Git pull stderr:', stderr);
+    }
+  } catch (error) {
+    console.error('Git pull error:', error instanceof Error ? error.message : 'Unknown error');
+  }
+}
+
 // Start server
 async function startServer() {
   await initializeDataFiles();
@@ -390,6 +452,11 @@ async function startServer() {
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Data directory: ${DATA_DIR}`);
+    
+    // Log git pull interval if configured
+    if (process.env.GIT_REPO_URL && process.env.GIT_USERNAME && process.env.GIT_ACCESS_TOKEN) {
+      console.log(`Git auto-pull enabled: every ${GIT_PULL_INTERVAL / 1000} seconds`);
+    }
   });
   
   // Watch for file changes
@@ -401,6 +468,17 @@ async function startServer() {
   watcher.on('change', (path) => {
     console.log(`File changed: ${path}`);
   });
+  
+  // Start periodic git pull if configured
+  if (process.env.GIT_REPO_URL && process.env.GIT_USERNAME && process.env.GIT_ACCESS_TOKEN) {
+    // Initial pull on startup
+    performGitPull().catch(err => console.error('Initial git pull failed:', err));
+    
+    // Set up periodic pull
+    setInterval(() => {
+      performGitPull().catch(err => console.error('Periodic git pull failed:', err));
+    }, GIT_PULL_INTERVAL);
+  }
 }
 
 // Serve index.html for all non-API routes in production (SPA fallback)
