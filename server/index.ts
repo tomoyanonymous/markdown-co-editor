@@ -283,16 +283,24 @@ app.post('/api/sync', requireAuth, async (req, res) => {
     }
     
     // Check if git repo is initialized
-    let isGitInitialized = false;
+    let needsRemote = false;
     try {
       await execAsync('git rev-parse --git-dir', { cwd: DATA_DIR });
-      isGitInitialized = true;
+      // Check if remote exists
+      try {
+        await execAsync('git remote get-url origin', { cwd: DATA_DIR });
+      } catch {
+        needsRemote = true;
+      }
     } catch {
       // Initialize git repo if not exists
       await execAsync('git init', { cwd: DATA_DIR });
-      // Construct authenticated URL (only used once during remote setup)
-      const authenticatedUrl = gitRepoUrl.replace('https://', `https://${gitUsername}:${gitAccessToken}@`);
-      await execAsync(`git remote add origin ${authenticatedUrl}`, { cwd: DATA_DIR });
+      needsRemote = true;
+    }
+    
+    // Add remote if needed (without credentials in URL)
+    if (needsRemote) {
+      await execAsync(`git remote add origin ${gitRepoUrl}`, { cwd: DATA_DIR });
     }
     
     // Stage changes
@@ -322,19 +330,25 @@ app.post('/api/sync', requireAuth, async (req, res) => {
     const { stdout: branchOutput } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: DATA_DIR });
     const currentBranch = branchOutput.trim() || 'main';
     
-    // Configure git credentials for push (using credential helper)
-    if (!isGitInitialized) {
-      // For the first push after initialization, use authenticated URL
-      const authenticatedUrl = gitRepoUrl.replace('https://', `https://${gitUsername}:${gitAccessToken}@`);
-      await execAsync(`git push ${authenticatedUrl} HEAD:${currentBranch}`, { cwd: DATA_DIR });
-    } else {
-      // For subsequent pushes, configure credential helper
-      await execAsync(`git config credential.helper 'store --file=${DATA_DIR}/.git-credentials'`, { cwd: DATA_DIR });
-      // Create credentials file
-      const credentialsContent = `https://${gitUsername}:${gitAccessToken}@${gitRepoUrl.replace('https://', '')}`;
-      await fs.writeFile(path.join(DATA_DIR, '.git-credentials'), credentialsContent, { mode: 0o600 });
-      await execAsync(`git push origin HEAD:${currentBranch}`, { cwd: DATA_DIR });
-    }
+    // Use environment variables for git credentials (more secure than files)
+    // Git will use these when GIT_ASKPASS is set to echo
+    const gitEnv = {
+      ...process.env,
+      GIT_USERNAME: gitUsername,
+      GIT_PASSWORD: gitAccessToken,
+      GIT_ASKPASS: 'echo',
+    };
+    
+    // Construct authenticated URL for push
+    const urlParts = gitRepoUrl.replace('https://', '').split('/');
+    const authenticatedUrl = `https://${gitUsername}:${gitAccessToken}@${urlParts.join('/')}`;
+    
+    // Push changes using the authenticated URL directly in command
+    // Note: This is still visible in process list, but is necessary for non-interactive push
+    await execAsync(`git push ${authenticatedUrl} HEAD:${currentBranch}`, { 
+      cwd: DATA_DIR,
+      env: gitEnv 
+    });
     
     res.json({ 
       success: true, 

@@ -79,10 +79,9 @@ function CommentPanel({
     setReplyText('');
   };
 
-  // Build comment tree structure
-  const buildCommentTree = (comments: Comment[]): Comment[] => {
-    const rootComments = comments.filter(c => !c.inReplyTo);
-    return rootComments;
+  // Get root comments (comments that are not replies to other comments)
+  const getRootComments = (comments: Comment[]): Comment[] => {
+    return comments.filter(c => !c.inReplyTo);
   };
 
   const getRepliesToComment = (commentId: string): Comment[] => {
@@ -90,8 +89,8 @@ function CommentPanel({
   };
 
   const displayedComments = showResolved 
-    ? buildCommentTree(comments)
-    : buildCommentTree(comments.filter(c => !c.resolved));
+    ? getRootComments(comments)
+    : getRootComments(comments.filter(c => !c.resolved));
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleString();
