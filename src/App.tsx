@@ -8,10 +8,12 @@ import './App.css';
 function App() {
   const [markdownContent, setMarkdownContent] = useState<string>('');
   const [htmlContent, setHtmlContent] = useState<string>('');
+  const [isRendering, setIsRendering] = useState<boolean>(false);
   const [comments, setComments] = useState<Comment[]>([]);
   const [currentFile, setCurrentFile] = useState<string>('sample.md');
   const [availableFiles, setAvailableFiles] = useState<string[]>([]);
   const [currentUser, setCurrentUser] = useState<UserInfo | null>(null);
+  const [displayName, setDisplayName] = useState<string>('');
   const [selectedRange, setSelectedRange] = useState<{
     startLine: number;
     startColumn: number;
@@ -23,7 +25,10 @@ function App() {
   useEffect(() => {
     fetch('/api/user')
       .then(res => res.json())
-      .then(user => setCurrentUser(user))
+      .then(user => {
+        setCurrentUser(user);
+        setDisplayName(user.name || user.email);
+      })
       .catch(err => console.error('Failed to load user info:', err));
   }, []);
 
@@ -54,6 +59,7 @@ function App() {
   useEffect(() => {
     if (!currentFile) return;
 
+    setIsRendering(true);
     fetch('/api/render', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -73,6 +79,9 @@ function App() {
       .catch(err => {
         console.error('Failed to render markdown:', err);
         setHtmlContent('<p style="color: red;">Failed to render markdown</p>');
+      })
+      .finally(() => {
+        setIsRendering(false);
       });
   }, [currentFile, markdownContent]);
 
@@ -89,11 +98,15 @@ function App() {
   const handleAddComment = async (text: string) => {
     if (!selectedRange) return;
 
+    // Validate and sanitize display name
+    const authorName = displayName.trim() || currentUser?.name || currentUser?.email || 'Anonymous';
+
     const newComment = {
       markdownFile: currentFile,
       ...selectedRange,
       text,
       resolved: false,
+      author: authorName,
     };
 
     try {
@@ -119,7 +132,7 @@ function App() {
       const response = await fetch(`/api/comments/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...comment, resolved: true }),
+        body: JSON.stringify({ ...comment, resolved: !comment.resolved }),
       });
 
       const updatedComment = await response.json();
@@ -151,7 +164,14 @@ function App() {
           {currentUser && (
             <div className="user-info">
               <span className="user-icon">👤</span>
-              <span className="user-name">{currentUser.name || currentUser.email}</span>
+              <input
+                type="text"
+                className="user-name-input"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Your name"
+                maxLength={50}
+              />
             </div>
           )}
           <div className="file-selector">
@@ -179,7 +199,7 @@ function App() {
         </div>
         
         <div className="preview-pane">
-          <Preview html={htmlContent} />
+          <Preview html={htmlContent} isRendering={isRendering} />
         </div>
         
         <div className="comment-pane">
@@ -187,6 +207,7 @@ function App() {
             comments={comments}
             selectedRange={selectedRange}
             currentUser={currentUser}
+            displayName={displayName}
             onAddComment={handleAddComment}
             onResolveComment={handleResolveComment}
             onDeleteComment={handleDeleteComment}
