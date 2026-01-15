@@ -116,14 +116,15 @@ function App() {
       const comment = comments.find(c => c.id === id);
       if (!comment) return;
 
-      await fetch(`/api/comments/${id}`, {
+      const response = await fetch(`/api/comments/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...comment, resolved: true }),
       });
 
+      const updatedComment = await response.json();
       setComments(comments.map(c => 
-        c.id === id ? { ...c, resolved: true } : c
+        c.id === id ? updatedComment : c
       ));
     } catch (err) {
       console.error('Failed to resolve comment:', err);

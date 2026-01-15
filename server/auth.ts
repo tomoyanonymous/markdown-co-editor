@@ -33,6 +33,7 @@ export function cloudflareAccessAuth(req: Request, res: Response, next: NextFunc
   // Extract Cloudflare Access headers
   const cfAccessAuthEmail = req.headers['cf-access-authenticated-user-email'] as string;
   const cfAccessJWT = req.headers['cf-access-jwt-assertion'] as string;
+  const cfAccessUserName = req.headers['cf-access-authenticated-user-name'] as string;
 
   if (!cfAccessAuthEmail || !cfAccessJWT) {
     return res.status(401).json({ 
@@ -44,11 +45,13 @@ export function cloudflareAccessAuth(req: Request, res: Response, next: NextFunc
   // In production with Cloudflare Access, validate the JWT
   // The JWT validation should be done against Cloudflare's public keys
   // For now, we trust the headers if they exist (Cloudflare Access validates them)
+  // TODO: Implement proper JWT validation using jsonwebtoken and Cloudflare's public keys
+  // Example: https://developers.cloudflare.com/cloudflare-one/identity/authorization-cookie/validating-json/
   
   // Extract user info from headers
   req.user = {
     email: cfAccessAuthEmail,
-    name: cfAccessAuthEmail.split('@')[0], // Use email prefix as name fallback
+    name: cfAccessUserName || cfAccessAuthEmail.split('@')[0], // Use CF name header or email prefix
     id: cfAccessAuthEmail, // Use email as unique ID
   };
 

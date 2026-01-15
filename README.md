@@ -270,6 +270,9 @@ docker-compose down
 - ユーザー情報（メールアドレス、名前）は自動的に取得され、コメントに関連付けられる
 - 開発環境では`CF_ACCESS_ENABLED=false`に設定することで認証をバイパス可能
 
+**セキュリティノート:**
+現在の実装は、Cloudflare Accessが提供するヘッダーを信頼する方式です。より高度なセキュリティが必要な場合は、JWTトークンをCloudflareの公開鍵で検証する実装を追加することを推奨します。詳細は[Cloudflare公式ドキュメント](https://developers.cloudflare.com/cloudflare-one/identity/authorization-cookie/validating-json/)を参照してください。
+
 ## 技術スタック
 
 - **フロントエンド**: React, TypeScript, Monaco Editor, Vite
