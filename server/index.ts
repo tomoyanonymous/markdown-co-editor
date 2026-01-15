@@ -39,6 +39,9 @@ const COMMENTS_FILE = path.join(DATA_DIR, 'comments.json');
 // Git sync lock to prevent concurrent sync operations
 let isSyncInProgress = false;
 
+// Store interval ID for cleanup
+let gitPullIntervalId: NodeJS.Timeout | null = null;
+
 // Initialize data directory and comments file
 async function initializeDataFiles() {
   try {
@@ -428,13 +431,8 @@ async function performGitPull(): Promise<void> {
     } else {
       console.log('Git pull completed:', stdout.trim());
       
-      // Reload comments from file after pull
-      try {
-        await fs.readFile(COMMENTS_FILE, 'utf-8');
-        console.log('Comments reloaded after pull');
-      } catch (error) {
-        console.error('Error reloading comments after pull:', error);
-      }
+      // Note: Comments are automatically reloaded from file on next API request
+      // No need to reload into memory here as the application reads from file each time
     }
     
     if (stderr && !stderr.includes('From https://')) {
@@ -474,8 +472,8 @@ async function startServer() {
     // Initial pull on startup
     performGitPull().catch(err => console.error('Initial git pull failed:', err));
     
-    // Set up periodic pull
-    setInterval(() => {
+    // Set up periodic pull and store interval ID for cleanup
+    gitPullIntervalId = setInterval(() => {
       performGitPull().catch(err => console.error('Periodic git pull failed:', err));
     }, GIT_PULL_INTERVAL);
   }
@@ -489,3 +487,22 @@ if (NODE_ENV === 'production') {
 }
 
 startServer();
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, cleaning up...');
+  if (gitPullIntervalId) {
+    clearInterval(gitPullIntervalId);
+    console.log('Stopped git pull interval');
+  }
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, cleaning up...');
+  if (gitPullIntervalId) {
+    clearInterval(gitPullIntervalId);
+    console.log('Stopped git pull interval');
+  }
+  process.exit(0);
+});
