@@ -17,7 +17,10 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
-const GIT_PULL_INTERVAL = parseInt(process.env.GIT_PULL_INTERVAL || '300000', 10); // Default 5 minutes (300000ms)
+
+// Validate and set git pull interval (default 5 minutes, min 30 seconds, max 24 hours)
+const rawInterval = parseInt(process.env.GIT_PULL_INTERVAL || '300000', 10);
+const GIT_PULL_INTERVAL = Math.max(30000, Math.min(86400000, rawInterval)); // Clamp between 30s and 24h
 
 // Middleware
 app.use(cors());
@@ -469,8 +472,8 @@ async function startServer() {
   
   // Start periodic git pull if configured
   if (process.env.GIT_REPO_URL && process.env.GIT_USERNAME && process.env.GIT_ACCESS_TOKEN) {
-    // Initial pull on startup
-    performGitPull().catch(err => console.error('Initial git pull failed:', err));
+    // Initial pull on startup (await to prevent race condition with interval)
+    await performGitPull().catch(err => console.error('Initial git pull failed:', err));
     
     // Set up periodic pull and store interval ID for cleanup
     gitPullIntervalId = setInterval(() => {
@@ -488,21 +491,24 @@ if (NODE_ENV === 'production') {
 
 startServer();
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, cleaning up...');
+// Cleanup function for graceful shutdown
+function cleanup() {
+  console.log('Cleaning up resources...');
   if (gitPullIntervalId) {
     clearInterval(gitPullIntervalId);
     console.log('Stopped git pull interval');
   }
+}
+
+// Graceful shutdown handlers
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received');
+  cleanup();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
-  console.log('SIGINT received, cleaning up...');
-  if (gitPullIntervalId) {
-    clearInterval(gitPullIntervalId);
-    console.log('Stopped git pull interval');
-  }
+  console.log('SIGINT received');
+  cleanup();
   process.exit(0);
 });
