@@ -11,6 +11,7 @@ interface CommentPanelProps {
     endColumn: number;
   } | null;
   currentUser: UserInfo | null;
+  displayName: string;
   onAddComment: (text: string) => void;
   onResolveComment: (id: string) => void;
   onDeleteComment: (id: string) => void;
@@ -20,6 +21,7 @@ function CommentPanel({
   comments,
   selectedRange,
   currentUser,
+  displayName,
   onAddComment,
   onResolveComment,
   onDeleteComment,
@@ -73,7 +75,7 @@ function CommentPanel({
               ` - ${selectedRange.endLine}`}
           </p>
           <p className="comment-as">
-            Commenting as: <strong>{currentUser.name || currentUser.email}</strong>
+            Commenting as: <strong>{displayName}</strong>
           </p>
           <form onSubmit={handleSubmit}>
             <textarea
@@ -122,12 +124,19 @@ function CommentPanel({
               <div className="comment-footer">
                 <span className="comment-date">{formatDate(comment.timestamp)}</span>
                 <div className="comment-actions">
-                  {!comment.resolved && (
+                  {!comment.resolved ? (
                     <button
                       onClick={() => onResolveComment(comment.id)}
                       className="resolve-button"
                     >
                       Resolve
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => onResolveComment(comment.id)}
+                      className="unresolve-button"
+                    >
+                      Unresolve
                     </button>
                   )}
                   <button

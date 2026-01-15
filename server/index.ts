@@ -113,7 +113,7 @@ app.post('/api/comments', requireAuth, async (req, res) => {
     const comment: Comment = {
       id: Date.now().toString() + Math.random().toString(36).substring(2, 11),
       ...req.body,
-      author: req.user!.name || req.user!.email,
+      author: req.body.author || req.user!.name || req.user!.email,
       authorEmail: req.user!.email,
       authorId: req.user!.id,
       timestamp: Date.now(),

@@ -44,6 +44,23 @@
   font-weight: 500;
 }
 
+.user-name-input {
+  font-size: 0.9rem;
+  font-weight: 500;
+  background-color: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  color: white;
+  padding: 0.3rem 0.5rem;
+  min-width: 150px;
+}
+
+.user-name-input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.6);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
 .file-selector {
   display: flex;
   align-items: center;

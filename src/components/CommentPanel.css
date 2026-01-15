@@ -181,6 +181,7 @@
 }
 
 .resolve-button,
+.unresolve-button,
 .delete-button {
   padding: 0.25rem 0.5rem;
   border: none;
@@ -197,6 +198,15 @@
 
 .resolve-button:hover {
   background-color: #218838;
+}
+
+.unresolve-button {
+  background-color: #ffc107;
+  color: #333;
+}
+
+.unresolve-button:hover {
+  background-color: #e0a800;
 }
 
 .delete-button {
