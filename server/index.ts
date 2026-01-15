@@ -4,13 +4,10 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import chokidar from 'chokidar';
 import type { Comment, CommentDatabase, RenderRequest, RenderResponse } from '../types/shared.js';
 
 const execAsync = promisify(exec);
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3001;
@@ -64,7 +61,7 @@ async function writeComments(db: CommentDatabase): Promise<void> {
 // API Routes
 
 // Get all comments
-app.get('/api/comments', async (req, res) => {
+app.get('/api/comments', async (_req, res) => {
   try {
     const db = await readComments();
     res.json(db.comments);
@@ -207,7 +204,7 @@ app.get('/api/markdown/:filename', async (req, res) => {
 });
 
 // List available markdown files
-app.get('/api/files', async (req, res) => {
+app.get('/api/files', async (_req, res) => {
   try {
     const files = await fs.readdir(DATA_DIR);
     const mdFiles = files.filter(f => f.endsWith('.md'));
