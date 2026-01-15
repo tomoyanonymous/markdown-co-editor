@@ -4,14 +4,18 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import chokidar from 'chokidar';
 import type { Comment, CommentDatabase, RenderRequest, RenderResponse, UserInfo } from '../types/shared.js';
 import { cloudflareAccessAuth, requireAuth } from './auth.js';
 
 const execFileAsync = promisify(execFile);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // Middleware
 app.use(cors());
@@ -19,6 +23,12 @@ app.use(express.json());
 
 // Apply Cloudflare Access authentication to all routes
 app.use(cloudflareAccessAuth);
+
+// Serve static files in production
+if (NODE_ENV === 'production') {
+  const distPath = path.join(__dirname, '../../dist/client');
+  app.use(express.static(distPath));
+}
 
 // Paths
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -260,6 +270,13 @@ async function startServer() {
   
   watcher.on('change', (path) => {
     console.log(`File changed: ${path}`);
+  });
+}
+
+// Serve index.html for all non-API routes in production (SPA fallback)
+if (NODE_ENV === 'production') {
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(__dirname, '../../dist/client/index.html'));
   });
 }
 
