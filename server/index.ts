@@ -1,13 +1,13 @@
 import express from 'express';
 import cors from 'cors';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
 import chokidar from 'chokidar';
 import type { Comment, CommentDatabase, RenderRequest, RenderResponse } from '../types/shared.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const app = express();
 const PORT = 3001;
@@ -87,7 +87,7 @@ app.get('/api/comments/:filename', async (req, res) => {
 app.post('/api/comments', async (req, res) => {
   try {
     const comment: Comment = {
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      id: Date.now().toString() + Math.random().toString(36).substring(2, 11),
       ...req.body,
       timestamp: Date.now(),
     };
@@ -162,20 +162,20 @@ app.post('/api/render', async (req, res) => {
       return;
     }
     
-    // Build pandoc command
-    let pandocCmd = `pandoc "${mdPath}" -f markdown -t html`;
+    // Build pandoc command arguments
+    const pandocArgs = [mdPath, '-f', 'markdown', '-t', 'html'];
     
     if (bibFile) {
       const bibPath = path.join(DATA_DIR, bibFile);
       try {
         await fs.access(bibPath);
-        pandocCmd += ` --citeproc --bibliography="${bibPath}"`;
+        pandocArgs.push('--citeproc', '--bibliography=' + bibPath);
       } catch {
         console.warn('Bibliography file not found, rendering without citations');
       }
     }
     
-    const { stdout, stderr } = await execAsync(pandocCmd);
+    const { stdout, stderr } = await execFileAsync('pandoc', pandocArgs);
     
     if (stderr) {
       console.warn('Pandoc stderr:', stderr);

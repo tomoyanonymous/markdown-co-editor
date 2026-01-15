@@ -7,9 +7,9 @@ yarn-error.log*
 # Build outputs
 dist/
 build/
-*.js
-*.js.map
-*.d.ts
+dist/**/*.js
+dist/**/*.js.map
+dist/**/*.d.ts
 !vite.config.ts
 
 # Environment
