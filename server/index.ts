@@ -35,6 +35,9 @@ if (NODE_ENV === 'production') {
 const DATA_DIR = path.join(process.cwd(), 'data');
 const COMMENTS_FILE = path.join(DATA_DIR, 'comments.json');
 
+// Git sync lock to prevent concurrent sync operations
+let isSyncInProgress = false;
+
 // Initialize data directory and comments file
 async function initializeDataFiles() {
   try {
@@ -262,17 +265,30 @@ app.get('/api/files', async (_req, res) => {
 
 // Git sync endpoint
 app.post('/api/sync', requireAuth, async (req, res) => {
+  // Check git configuration before acquiring lock
+  const gitRepoUrl = process.env.GIT_REPO_URL;
+  const gitUsername = process.env.GIT_USERNAME;
+  const gitAccessToken = process.env.GIT_ACCESS_TOKEN;
+  
+  if (!gitRepoUrl || !gitUsername || !gitAccessToken) {
+    res.status(400).json({ 
+      error: 'Git sync not configured. Please set GIT_REPO_URL, GIT_USERNAME, and GIT_ACCESS_TOKEN environment variables.' 
+    });
+    return;
+  }
+  
+  // Check if a sync is already in progress
+  if (isSyncInProgress) {
+    res.status(409).json({ 
+      error: 'A sync operation is already in progress. Please wait for it to complete.' 
+    });
+    return;
+  }
+  
+  // Set the lock
+  isSyncInProgress = true;
+  
   try {
-    const gitRepoUrl = process.env.GIT_REPO_URL;
-    const gitUsername = process.env.GIT_USERNAME;
-    const gitAccessToken = process.env.GIT_ACCESS_TOKEN;
-    
-    if (!gitRepoUrl || !gitUsername || !gitAccessToken) {
-      res.status(400).json({ 
-        error: 'Git sync not configured. Please set GIT_REPO_URL, GIT_USERNAME, and GIT_ACCESS_TOKEN environment variables.' 
-      });
-      return;
-    }
     
     // Configure git user if not already configured
     try {
@@ -361,6 +377,9 @@ app.post('/api/sync', requireAuth, async (req, res) => {
       error: 'Failed to sync with git repository',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
+  } finally {
+    // Always release the lock when done
+    isSyncInProgress = false;
   }
 });
 
