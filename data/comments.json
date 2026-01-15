@@ -7,10 +7,27 @@
       "startColumn": 1,
       "endLine": 10,
       "endColumn": 1,
-      "text": "test",
+      "text": "Updated test comment",
       "author": "tomoya ",
       "resolved": false,
-      "timestamp": 1768462064715
+      "timestamp": 1768462064715,
+      "editedBy": "dev@example.com",
+      "editedAt": 1768468191794
+    },
+    {
+      "id": "1768468198575r9wrej183",
+      "text": "This is a reply to the first comment",
+      "markdownFile": "sample.md",
+      "startLine": 9,
+      "startColumn": 1,
+      "endLine": 10,
+      "endColumn": 1,
+      "author": "Test User",
+      "resolved": false,
+      "inReplyTo": "1768462064715fxgo5bvd7",
+      "authorEmail": "dev@example.com",
+      "authorId": "dev-user-id",
+      "timestamp": 1768468198575
     }
   ]
 }

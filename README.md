@@ -88,15 +88,38 @@ npm run dev
 ### コメントの管理
 
 - **表示**: コメントパネルで全てのコメントとその作成者を確認できる
+- **編集**: 「Edit」ボタンでコメントの内容を編集できる（編集履歴も記録される）
+- **返信**: 「Reply」ボタンでコメントに対して返信を追加できる（スレッド形式で表示）
 - **解決**: 「Resolve」ボタンで解決済みとしてマーク（解決者の情報も記録される）
 - **削除**: 「Delete」ボタンでコメントを削除
 - **フィルター**: "Show resolved"チェックボックスで解決済みコメントの表示/非表示を切り替え
 
-### 文献引用の使用
+### コメント引用の使用
 
 1. `data/references.bib`にBibTeX形式で文献情報を追加
 2. Markdownファイル内で `[@citation-key]` の形式で引用
 3. Pandocが自動的に文献リストを生成
+
+### Gitによる同期
+
+コメントの変更をGitリポジトリに自動的に同期できます：
+
+1. **環境変数の設定**（`.env`ファイルまたは環境変数として設定）：
+   ```bash
+   GIT_REPO_URL=https://github.com/username/repository.git
+   GIT_USERNAME=your-github-username
+   GIT_ACCESS_TOKEN=your-github-personal-access-token
+   ```
+
+2. **同期の実行**：
+   - ヘッダーの「Sync」ボタンをクリック
+   - コメントの変更が自動的にコミットされ、リモートリポジトリにプッシュされる
+   - 同期が成功すると、成功メッセージが表示される
+
+3. **注意点**：
+   - 環境変数が設定されていない場合は、エラーメッセージが表示される
+   - 変更がない場合は「No changes to sync」と表示される
+   - GitHubのPersonal Access Tokenは`repo`スコープが必要
 
 ## プロジェクト構成
 
@@ -138,8 +161,16 @@ markdown-co-editor/
 - `GET /api/comments` - 全コメント取得
 - `GET /api/comments/:filename` - 特定ファイルのコメント取得
 - `POST /api/comments` - コメント追加（要認証）
+  - `inReplyTo`フィールドを含めることで、既存のコメントへの返信として追加可能
 - `PUT /api/comments/:id` - コメント更新（要認証）
+  - `text`フィールドを変更することでコメントの編集が可能
+  - `resolved`フィールドで解決/未解決を切り替え可能
 - `DELETE /api/comments/:id` - コメント削除（要認証）
+
+### Git同期関連
+
+- `POST /api/sync` - コメントの変更をGitリポジトリに同期（要認証）
+  - 環境変数`GIT_REPO_URL`、`GIT_USERNAME`、`GIT_ACCESS_TOKEN`が必要
 
 ### ファイル関連
 
@@ -170,7 +201,9 @@ npm start
 
 ## Gitでの履歴管理
 
-`data/comments.json`ファイルをGitリポジトリで管理することで、コメントの履歴を追跡できます：
+`data/comments.json`ファイルをGitリポジトリで管理することで、コメントの履歴を追跡できます。
+
+### 手動での同期
 
 ```bash
 git add data/comments.json
@@ -183,6 +216,21 @@ git push
 ```bash
 git pull
 ```
+
+### 自動同期機能
+
+環境変数を設定することで、UIから直接Gitリポジトリに同期できます：
+
+1. `.env`ファイルに以下を設定：
+   ```bash
+   GIT_REPO_URL=https://github.com/username/repository.git
+   GIT_USERNAME=your-github-username
+   GIT_ACCESS_TOKEN=your-github-personal-access-token
+   ```
+
+2. アプリケーションを再起動
+
+3. ヘッダーの「Sync」ボタンをクリックして同期
 
 ## Dockerでのデプロイ
 
