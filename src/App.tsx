@@ -98,12 +98,15 @@ function App() {
   const handleAddComment = async (text: string) => {
     if (!selectedRange) return;
 
+    // Validate and sanitize display name
+    const authorName = displayName.trim() || currentUser?.name || currentUser?.email || 'Anonymous';
+
     const newComment = {
       markdownFile: currentFile,
       ...selectedRange,
       text,
       resolved: false,
-      author: displayName, // Use displayName instead of server-provided name
+      author: authorName,
     };
 
     try {
@@ -167,6 +170,7 @@ function App() {
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="Your name"
+                maxLength={50}
               />
             </div>
           )}
