@@ -1,0 +1,266 @@
+import express from 'express';
+import cors from 'cors';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import fs from 'fs/promises';
+import path from 'path';
+import chokidar from 'chokidar';
+import type { Comment, CommentDatabase, RenderRequest, RenderResponse, UserInfo } from '../types/shared.js';
+import { cloudflareAccessAuth, requireAuth } from './auth.js';
+
+const execFileAsync = promisify(execFile);
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Apply Cloudflare Access authentication to all routes
+app.use(cloudflareAccessAuth);
+
+// Paths
+const DATA_DIR = path.join(process.cwd(), 'data');
+const COMMENTS_FILE = path.join(DATA_DIR, 'comments.json');
+
+// Initialize data directory and comments file
+async function initializeDataFiles() {
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    
+    try {
+      await fs.access(COMMENTS_FILE);
+    } catch {
+      const initialData: CommentDatabase = { comments: [] };
+      await fs.writeFile(COMMENTS_FILE, JSON.stringify(initialData, null, 2));
+      console.log('Created comments.json');
+    }
+  } catch (error) {
+    console.error('Error initializing data files:', error);
+  }
+}
+
+// Read comments from JSON file
+async function readComments(): Promise<CommentDatabase> {
+  try {
+    const data = await fs.readFile(COMMENTS_FILE, 'utf-8');
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Error reading comments:', error);
+    return { comments: [] };
+  }
+}
+
+// Write comments to JSON file
+async function writeComments(db: CommentDatabase): Promise<void> {
+  try {
+    await fs.writeFile(COMMENTS_FILE, JSON.stringify(db, null, 2));
+  } catch (error) {
+    console.error('Error writing comments:', error);
+    throw error;
+  }
+}
+
+// API Routes
+
+// Get current user info
+app.get('/api/user', requireAuth, (req, res) => {
+  const userInfo: UserInfo = {
+    email: req.user!.email,
+    name: req.user!.name,
+    id: req.user!.id,
+  };
+  res.json(userInfo);
+});
+
+// Get all comments
+app.get('/api/comments', async (_req, res) => {
+  try {
+    const db = await readComments();
+    res.json(db.comments);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to read comments' });
+  }
+});
+
+// Get comments for a specific file
+app.get('/api/comments/:filename', async (req, res) => {
+  try {
+    const db = await readComments();
+    const comments = db.comments.filter(
+      c => c.markdownFile === req.params.filename
+    );
+    res.json(comments);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to read comments' });
+  }
+});
+
+// Add a new comment
+app.post('/api/comments', requireAuth, async (req, res) => {
+  try {
+    const comment: Comment = {
+      id: Date.now().toString() + Math.random().toString(36).substring(2, 11),
+      ...req.body,
+      author: req.user!.name || req.user!.email,
+      authorEmail: req.user!.email,
+      authorId: req.user!.id,
+      timestamp: Date.now(),
+    };
+    
+    const db = await readComments();
+    db.comments.push(comment);
+    await writeComments(db);
+    
+    res.status(201).json(comment);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to add comment' });
+  }
+});
+
+// Update a comment (e.g., resolve/unresolve)
+app.put('/api/comments/:id', requireAuth, async (req, res) => {
+  try {
+    const db = await readComments();
+    const index = db.comments.findIndex(c => c.id === req.params.id);
+    
+    if (index === -1) {
+      res.status(404).json({ error: 'Comment not found' });
+      return;
+    }
+    
+    const updatedComment = { ...db.comments[index], ...req.body };
+    
+    // If resolving, add resolver info
+    if (req.body.resolved === true && !db.comments[index].resolved) {
+      updatedComment.resolvedBy = req.user!.email;
+      updatedComment.resolvedAt = Date.now();
+    } else if (req.body.resolved === false) {
+      // If unresolving, clear resolver info
+      delete updatedComment.resolvedBy;
+      delete updatedComment.resolvedAt;
+    }
+    
+    db.comments[index] = updatedComment;
+    await writeComments(db);
+    
+    res.json(db.comments[index]);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update comment' });
+  }
+});
+
+// Delete a comment
+app.delete('/api/comments/:id', requireAuth, async (req, res) => {
+  try {
+    const db = await readComments();
+    const filtered = db.comments.filter(c => c.id !== req.params.id);
+    
+    if (filtered.length === db.comments.length) {
+      res.status(404).json({ error: 'Comment not found' });
+      return;
+    }
+    
+    db.comments = filtered;
+    await writeComments(db);
+    
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete comment' });
+  }
+});
+
+// Render markdown with pandoc
+app.post('/api/render', async (req, res) => {
+  try {
+    const { markdownFile, bibFile }: RenderRequest = req.body;
+    
+    if (!markdownFile) {
+      res.status(400).json({ error: 'markdownFile is required' });
+      return;
+    }
+    
+    const mdPath = path.join(DATA_DIR, markdownFile);
+    
+    // Check if file exists
+    try {
+      await fs.access(mdPath);
+    } catch {
+      res.status(404).json({ error: 'Markdown file not found' });
+      return;
+    }
+    
+    // Build pandoc command arguments
+    const pandocArgs = [mdPath, '-f', 'markdown', '-t', 'html'];
+    
+    if (bibFile) {
+      const bibPath = path.join(DATA_DIR, bibFile);
+      try {
+        await fs.access(bibPath);
+        pandocArgs.push('--citeproc', '--bibliography=' + bibPath);
+      } catch {
+        console.warn('Bibliography file not found, rendering without citations');
+      }
+    }
+    
+    const { stdout, stderr } = await execFileAsync('pandoc', pandocArgs);
+    
+    if (stderr) {
+      console.warn('Pandoc stderr:', stderr);
+    }
+    
+    const response: RenderResponse = { html: stdout };
+    res.json(response);
+  } catch (error) {
+    console.error('Render error:', error);
+    res.status(500).json({ 
+      html: '',
+      error: error instanceof Error ? error.message : 'Failed to render markdown'
+    });
+  }
+});
+
+// Get markdown file content
+app.get('/api/markdown/:filename', async (req, res) => {
+  try {
+    const mdPath = path.join(DATA_DIR, req.params.filename);
+    const content = await fs.readFile(mdPath, 'utf-8');
+    res.json({ content });
+  } catch (error) {
+    res.status(404).json({ error: 'Markdown file not found' });
+  }
+});
+
+// List available markdown files
+app.get('/api/files', async (_req, res) => {
+  try {
+    const files = await fs.readdir(DATA_DIR);
+    const mdFiles = files.filter(f => f.endsWith('.md'));
+    res.json(mdFiles);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to list files' });
+  }
+});
+
+// Start server
+async function startServer() {
+  await initializeDataFiles();
+  
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Data directory: ${DATA_DIR}`);
+  });
+  
+  // Watch for file changes
+  const watcher = chokidar.watch(DATA_DIR, {
+    persistent: true,
+    ignoreInitial: true,
+  });
+  
+  watcher.on('change', (path) => {
+    console.log(`File changed: ${path}`);
+  });
+}
+
+startServer();
