@@ -274,9 +274,6 @@ app.post('/api/sync', requireAuth, async (req, res) => {
       return;
     }
     
-    // Configure git credentials
-    const authenticatedUrl = gitRepoUrl.replace('https://', `https://${gitUsername}:${gitAccessToken}@`);
-    
     // Configure git user if not already configured
     try {
       await execAsync('git config user.email', { cwd: DATA_DIR });
@@ -286,11 +283,15 @@ app.post('/api/sync', requireAuth, async (req, res) => {
     }
     
     // Check if git repo is initialized
+    let isGitInitialized = false;
     try {
       await execAsync('git rev-parse --git-dir', { cwd: DATA_DIR });
+      isGitInitialized = true;
     } catch {
       // Initialize git repo if not exists
       await execAsync('git init', { cwd: DATA_DIR });
+      // Construct authenticated URL (only used once during remote setup)
+      const authenticatedUrl = gitRepoUrl.replace('https://', `https://${gitUsername}:${gitAccessToken}@`);
       await execAsync(`git remote add origin ${authenticatedUrl}`, { cwd: DATA_DIR });
     }
     
@@ -309,12 +310,31 @@ app.post('/api/sync', requireAuth, async (req, res) => {
       return;
     }
     
-    // Commit changes
-    const commitMessage = `Update comments by ${req.user!.email} at ${new Date().toISOString()}`;
-    await execAsync(`git commit -m "${commitMessage}"`, { cwd: DATA_DIR });
+    // Create a safe commit message (escape special characters)
+    const userEmail = req.user!.email.replace(/[^a-zA-Z0-9@._-]/g, '_');
+    const timestamp = new Date().toISOString().replace(/[^0-9T:-]/g, '_');
+    const commitMessage = `Update comments by ${userEmail} at ${timestamp}`;
     
-    // Push changes
-    await execAsync(`git push ${authenticatedUrl} HEAD:main`, { cwd: DATA_DIR });
+    // Commit changes with properly escaped message
+    await execAsync('git commit -m ' + JSON.stringify(commitMessage), { cwd: DATA_DIR });
+    
+    // Detect the current branch name
+    const { stdout: branchOutput } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: DATA_DIR });
+    const currentBranch = branchOutput.trim() || 'main';
+    
+    // Configure git credentials for push (using credential helper)
+    if (!isGitInitialized) {
+      // For the first push after initialization, use authenticated URL
+      const authenticatedUrl = gitRepoUrl.replace('https://', `https://${gitUsername}:${gitAccessToken}@`);
+      await execAsync(`git push ${authenticatedUrl} HEAD:${currentBranch}`, { cwd: DATA_DIR });
+    } else {
+      // For subsequent pushes, configure credential helper
+      await execAsync(`git config credential.helper 'store --file=${DATA_DIR}/.git-credentials'`, { cwd: DATA_DIR });
+      // Create credentials file
+      const credentialsContent = `https://${gitUsername}:${gitAccessToken}@${gitRepoUrl.replace('https://', '')}`;
+      await fs.writeFile(path.join(DATA_DIR, '.git-credentials'), credentialsContent, { mode: 0o600 });
+      await execAsync(`git push origin HEAD:${currentBranch}`, { cwd: DATA_DIR });
+    }
     
     res.json({ 
       success: true, 

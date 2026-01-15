@@ -103,21 +103,21 @@ function App() {
     // Validate and sanitize display name
     const authorName = displayName.trim() || currentUser?.name || currentUser?.email || 'Anonymous';
 
+    // Find parent comment once if this is a reply
+    const parentComment = inReplyTo ? comments.find(c => c.id === inReplyTo) : null;
+
     const newComment = {
       markdownFile: currentFile,
       ...(inReplyTo ? {} : selectedRange),
       text,
       resolved: false,
       author: authorName,
-      ...(inReplyTo && { 
+      ...(inReplyTo && parentComment && {
         inReplyTo,
-        // For replies, copy the parent comment's range
-        ...comments.find(c => c.id === inReplyTo)?.startLine && {
-          startLine: comments.find(c => c.id === inReplyTo)!.startLine,
-          startColumn: comments.find(c => c.id === inReplyTo)!.startColumn,
-          endLine: comments.find(c => c.id === inReplyTo)!.endLine,
-          endColumn: comments.find(c => c.id === inReplyTo)!.endColumn,
-        }
+        startLine: parentComment.startLine,
+        startColumn: parentComment.startColumn,
+        endLine: parentComment.endLine,
+        endColumn: parentComment.endColumn,
       })
     };
 

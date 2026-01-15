@@ -36,3 +36,7 @@ logs/
 # Temp files
 tmp/
 temp/
+
+# Git credentials (for git sync feature)
+.git-credentials
+data/.git-credentials
