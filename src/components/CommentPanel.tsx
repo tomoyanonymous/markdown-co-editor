@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Comment } from '../../types/shared';
+import type { Comment, UserInfo } from '../../types/shared';
 import './CommentPanel.css';
 
 interface CommentPanelProps {
@@ -10,7 +10,8 @@ interface CommentPanelProps {
     endLine: number;
     endColumn: number;
   } | null;
-  onAddComment: (text: string, author: string) => void;
+  currentUser: UserInfo | null;
+  onAddComment: (text: string) => void;
   onResolveComment: (id: string) => void;
   onDeleteComment: (id: string) => void;
 }
@@ -18,19 +19,19 @@ interface CommentPanelProps {
 function CommentPanel({
   comments,
   selectedRange,
+  currentUser,
   onAddComment,
   onResolveComment,
   onDeleteComment,
 }: CommentPanelProps) {
   const [newCommentText, setNewCommentText] = useState('');
-  const [author, setAuthor] = useState('');
   const [showResolved, setShowResolved] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCommentText.trim() || !author.trim()) return;
+    if (!newCommentText.trim()) return;
     
-    onAddComment(newCommentText, author);
+    onAddComment(newCommentText);
     setNewCommentText('');
   };
 
@@ -63,7 +64,7 @@ function CommentPanel({
         </label>
       </div>
 
-      {selectedRange && (
+      {selectedRange && currentUser && (
         <div className="comment-form">
           <h3>Add Comment</h3>
           <p className="selected-range">
@@ -71,14 +72,10 @@ function CommentPanel({
             {selectedRange.startLine !== selectedRange.endLine && 
               ` - ${selectedRange.endLine}`}
           </p>
+          <p className="comment-as">
+            Commenting as: <strong>{currentUser.name || currentUser.email}</strong>
+          </p>
           <form onSubmit={handleSubmit}>
-            <input
-              type="text"
-              placeholder="Your name"
-              value={author}
-              onChange={(e) => setAuthor(e.target.value)}
-              className="author-input"
-            />
             <textarea
               placeholder="Add your comment..."
               value={newCommentText}
@@ -107,10 +104,21 @@ function CommentPanel({
               className={`comment-item ${comment.resolved ? 'resolved' : ''}`}
             >
               <div className="comment-header">
-                <strong className="comment-author">{comment.author}</strong>
+                <div className="comment-author-info">
+                  <strong className="comment-author">{comment.author}</strong>
+                  {comment.authorEmail && (
+                    <span className="comment-author-email">({comment.authorEmail})</span>
+                  )}
+                </div>
                 <span className="comment-range">{formatRange(comment)}</span>
               </div>
               <p className="comment-text">{comment.text}</p>
+              {comment.resolved && comment.resolvedBy && (
+                <p className="resolved-info">
+                  ✓ Resolved by {comment.resolvedBy}
+                  {comment.resolvedAt && ` on ${formatDate(comment.resolvedAt)}`}
+                </p>
+              )}
               <div className="comment-footer">
                 <span className="comment-date">{formatDate(comment.timestamp)}</span>
                 <div className="comment-actions">

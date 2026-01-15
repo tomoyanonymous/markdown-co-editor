@@ -10,9 +10,11 @@ Markdownの共同書籍執筆・編集用プレビューアプリケーション
 
 - **2ペインレイアウト**: 左側にMonaco EditorでシンタックスハイライトされたMarkdownソース、右側にHTMLプレビュー
 - **コメント機能**: Markdownソースの任意の選択範囲に対してコメントを追加可能
+- **マルチユーザー対応**: Cloudflare Accessによる認証で複数ユーザーの共同編集をサポート
 - **JSONベースの簡易データベース**: コメント履歴をローカルJSONファイルで管理し、Gitで履歴管理
 - **Pandoc統合**: サーバーサイドでPandocを使用し、BibTeX/pandoc-citeprocによる文献管理をサポート
 - **リアルタイムプレビュー**: Markdown編集時に即座にHTMLプレビューを更新
+- **Docker対応**: docker-composeで簡単にデプロイ可能
 
 ## 前提条件
 
@@ -80,13 +82,13 @@ npm run dev
 
 1. 左ペイン（エディタ）でコメントを付けたいテキスト範囲を選択
 2. 右側のコメントパネルにフォームが表示される
-3. 名前とコメント内容を入力して「Add Comment」をクリック
+3. コメント内容を入力して「Add Comment」をクリック（ユーザー名は認証情報から自動設定）
 4. 追加されたコメントがエディタ上でハイライト表示される
 
 ### コメントの管理
 
-- **表示**: コメントパネルで全てのコメントを確認できる
-- **解決**: 「Resolve」ボタンで解決済みとしてマーク
+- **表示**: コメントパネルで全てのコメントとその作成者を確認できる
+- **解決**: 「Resolve」ボタンで解決済みとしてマーク（解決者の情報も記録される）
 - **削除**: 「Delete」ボタンでコメントを削除
 - **フィルター**: "Show resolved"チェックボックスで解決済みコメントの表示/非表示を切り替え
 
@@ -108,7 +110,8 @@ markdown-co-editor/
 │   ├── App.tsx             # メインアプリケーション
 │   └── main.tsx            # エントリーポイント
 ├── server/                 # バックエンドサーバー
-│   └── index.ts            # Express APIサーバー
+│   ├── index.ts            # Express APIサーバー
+│   └── auth.ts             # Cloudflare Access認証ミドルウェア
 ├── types/                  # TypeScript型定義
 │   └── shared.ts           # 共有型定義
 ├── data/                   # データファイル
@@ -118,18 +121,25 @@ markdown-co-editor/
 ├── package.json            # プロジェクト設定
 ├── tsconfig.json           # TypeScript設定（フロントエンド）
 ├── tsconfig.server.json    # TypeScript設定（サーバー）
-└── vite.config.ts          # Vite設定
+├── vite.config.ts          # Vite設定
+├── Dockerfile              # Dockerイメージビルド定義
+├── docker-compose.yml      # Docker Composeデプロイ設定
+└── .env.example            # 環境変数のテンプレート
 ```
 
 ## API エンドポイント
+
+### 認証関連
+
+- `GET /api/user` - 現在のユーザー情報取得（要認証）
 
 ### コメント関連
 
 - `GET /api/comments` - 全コメント取得
 - `GET /api/comments/:filename` - 特定ファイルのコメント取得
-- `POST /api/comments` - コメント追加
-- `PUT /api/comments/:id` - コメント更新
-- `DELETE /api/comments/:id` - コメント削除
+- `POST /api/comments` - コメント追加（要認証）
+- `PUT /api/comments/:id` - コメント更新（要認証）
+- `DELETE /api/comments/:id` - コメント削除（要認証）
 
 ### ファイル関連
 
@@ -174,21 +184,112 @@ git push
 git pull
 ```
 
+## Dockerでのデプロイ
+
+### 前提条件
+
+- Docker
+- Docker Compose
+
+### 1. 環境変数の設定
+
+`.env.example`をコピーして`.env`ファイルを作成：
+
+```bash
+cp .env.example .env
+```
+
+`.env`ファイルを編集して環境変数を設定：
+
+```bash
+# 開発環境（Cloudflare Access無効）
+NODE_ENV=production
+PORT=3001
+CF_ACCESS_ENABLED=false
+DEV_USER_EMAIL=your@example.com
+DEV_USER_NAME=Your Name
+
+# 本番環境（Cloudflare Access有効）の場合
+# CF_ACCESS_ENABLED=true
+# CF_ACCESS_TEAM_DOMAIN=yourteam.cloudflareaccess.com
+# CF_ACCESS_AUD=your-application-aud-tag
+```
+
+### 2. Docker Composeで起動
+
+```bash
+docker-compose up -d
+```
+
+アプリケーションは http://localhost:3001 で起動します。
+
+### 3. ログの確認
+
+```bash
+docker-compose logs -f
+```
+
+### 4. 停止
+
+```bash
+docker-compose down
+```
+
+### データの永続化
+
+`data/`ディレクトリはホストマシンとコンテナ間でマウントされているため、Markdownファイルとコメント履歴は永続化されます。
+
+## Cloudflare Accessによる認証
+
+### Cloudflare Accessの設定
+
+1. **Cloudflare Accessアプリケーションの作成**
+   - Cloudflareダッシュボードで新しいアプリケーションを作成
+   - アプリケーションドメインを設定（例: `markdown-editor.yourteam.com`）
+   - アクセスポリシーを設定（例: 特定のメールドメインのみ許可）
+
+2. **環境変数の設定**
+   
+   `.env`ファイルに以下を追加：
+   
+   ```bash
+   CF_ACCESS_ENABLED=true
+   CF_ACCESS_TEAM_DOMAIN=yourteam.cloudflareaccess.com
+   CF_ACCESS_AUD=your-application-aud-tag
+   ```
+
+3. **アプリケーションの再起動**
+   
+   ```bash
+   docker-compose restart
+   ```
+
+### 認証の動作
+
+- Cloudflare Accessが有効な場合、全てのリクエストでCloudflareが提供する認証ヘッダーを検証
+- ユーザー情報（メールアドレス、名前）は自動的に取得され、コメントに関連付けられる
+- 開発環境では`CF_ACCESS_ENABLED=false`に設定することで認証をバイパス可能
+
 ## 技術スタック
 
 - **フロントエンド**: React, TypeScript, Monaco Editor, Vite
 - **バックエンド**: Node.js, Express, TypeScript
+- **認証**: Cloudflare Access
 - **レンダリング**: Pandoc
 - **文献管理**: BibTeX, pandoc-citeproc
+- **デプロイ**: Docker, Docker Compose
 
 ## セキュリティに関する注意
 
-このアプリケーションは、ローカル開発環境での使用を想定した基本的な実装です。本番環境で使用する場合は、以下のセキュリティ対策を追加してください：
+このアプリケーションは、Cloudflare Accessによる認証を使用することで安全な共同編集環境を提供します。
 
-- **レート制限**: APIエンドポイントにレート制限を実装
-- **認証・認可**: ユーザー認証とアクセス制御の追加
-- **入力検証**: より厳密なファイル名とパスの検証
-- **HTTPS**: 本番環境では必ずHTTPSを使用
+### 本番環境でのセキュリティ対策
+
+- **Cloudflare Access**: 必ずCloudflare Accessを有効にして認証を実装
+- **HTTPS**: Cloudflare経由で必ずHTTPSを使用
+- **レート制限**: 必要に応じてAPIエンドポイントにレート制限を実装
+- **入力検証**: ファイル名とパスの検証を適切に実施
+- **定期的なバックアップ**: `data/`ディレクトリを定期的にバックアップ
 
 ## ライセンス
 

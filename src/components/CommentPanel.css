@@ -38,7 +38,17 @@
 .selected-range {
   font-size: 0.85rem;
   color: #666;
+  margin-bottom: 0.5rem;
+}
+
+.comment-as {
+  font-size: 0.85rem;
+  color: #333;
   margin-bottom: 0.75rem;
+}
+
+.comment-as strong {
+  color: #0066cc;
 }
 
 .comment-form form {
@@ -107,13 +117,25 @@
 .comment-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 0.5rem;
+}
+
+.comment-author-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
 }
 
 .comment-author {
   font-size: 0.9rem;
   color: #333;
+}
+
+.comment-author-email {
+  font-size: 0.75rem;
+  color: #666;
+  font-weight: normal;
 }
 
 .comment-range {
@@ -129,6 +151,16 @@
   color: #333;
   margin-bottom: 0.5rem;
   word-wrap: break-word;
+}
+
+.resolved-info {
+  font-size: 0.8rem;
+  color: #28a745;
+  font-style: italic;
+  margin-bottom: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  background-color: #d4edda;
+  border-radius: 3px;
 }
 
 .comment-footer {

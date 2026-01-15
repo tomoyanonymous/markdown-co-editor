@@ -7,8 +7,12 @@ export interface Comment {
   endColumn: number;
   text: string;
   author: string;
+  authorEmail?: string; // Email of the authenticated user
+  authorId?: string;    // User ID from authentication
   timestamp: number;
   resolved: boolean;
+  resolvedBy?: string;  // Email of user who resolved the comment
+  resolvedAt?: number;  // Timestamp when resolved
 }
 
 export interface CommentDatabase {
@@ -23,4 +27,10 @@ export interface RenderRequest {
 export interface RenderResponse {
   html: string;
   error?: string;
+}
+
+export interface UserInfo {
+  email: string;
+  name?: string;
+  id: string;
 }

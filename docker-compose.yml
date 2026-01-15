@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  markdown-editor:
+    build: .
+    container_name: markdown-co-editor
+    ports:
+      - "${PORT:-3001}:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - CF_ACCESS_ENABLED=${CF_ACCESS_ENABLED:-false}
+      - DEV_USER_EMAIL=${DEV_USER_EMAIL:-dev@example.com}
+      - DEV_USER_NAME=${DEV_USER_NAME:-Development User}
+    volumes:
+      # Mount data directory for persistent storage
+      - ./data:/app/data
+    restart: unless-stopped
+    networks:
+      - markdown-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/files"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  markdown-network:
+    driver: bridge

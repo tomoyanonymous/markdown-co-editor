@@ -5,16 +5,20 @@ import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
 import chokidar from 'chokidar';
-import type { Comment, CommentDatabase, RenderRequest, RenderResponse } from '../types/shared.js';
+import type { Comment, CommentDatabase, RenderRequest, RenderResponse, UserInfo } from '../types/shared.js';
+import { cloudflareAccessAuth, requireAuth } from './auth.js';
 
 const execFileAsync = promisify(execFile);
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Apply Cloudflare Access authentication to all routes
+app.use(cloudflareAccessAuth);
 
 // Paths
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -60,6 +64,16 @@ async function writeComments(db: CommentDatabase): Promise<void> {
 
 // API Routes
 
+// Get current user info
+app.get('/api/user', requireAuth, (req, res) => {
+  const userInfo: UserInfo = {
+    email: req.user!.email,
+    name: req.user!.name,
+    id: req.user!.id,
+  };
+  res.json(userInfo);
+});
+
 // Get all comments
 app.get('/api/comments', async (_req, res) => {
   try {
@@ -84,11 +98,14 @@ app.get('/api/comments/:filename', async (req, res) => {
 });
 
 // Add a new comment
-app.post('/api/comments', async (req, res) => {
+app.post('/api/comments', requireAuth, async (req, res) => {
   try {
     const comment: Comment = {
       id: Date.now().toString() + Math.random().toString(36).substring(2, 11),
       ...req.body,
+      author: req.user!.name || req.user!.email,
+      authorEmail: req.user!.email,
+      authorId: req.user!.id,
       timestamp: Date.now(),
     };
     
@@ -102,8 +119,8 @@ app.post('/api/comments', async (req, res) => {
   }
 });
 
-// Update a comment
-app.put('/api/comments/:id', async (req, res) => {
+// Update a comment (e.g., resolve/unresolve)
+app.put('/api/comments/:id', requireAuth, async (req, res) => {
   try {
     const db = await readComments();
     const index = db.comments.findIndex(c => c.id === req.params.id);
@@ -113,7 +130,19 @@ app.put('/api/comments/:id', async (req, res) => {
       return;
     }
     
-    db.comments[index] = { ...db.comments[index], ...req.body };
+    const updatedComment = { ...db.comments[index], ...req.body };
+    
+    // If resolving, add resolver info
+    if (req.body.resolved === true && !db.comments[index].resolved) {
+      updatedComment.resolvedBy = req.user!.email;
+      updatedComment.resolvedAt = Date.now();
+    } else if (req.body.resolved === false) {
+      // If unresolving, clear resolver info
+      delete updatedComment.resolvedBy;
+      delete updatedComment.resolvedAt;
+    }
+    
+    db.comments[index] = updatedComment;
     await writeComments(db);
     
     res.json(db.comments[index]);
@@ -123,7 +152,7 @@ app.put('/api/comments/:id', async (req, res) => {
 });
 
 // Delete a comment
-app.delete('/api/comments/:id', async (req, res) => {
+app.delete('/api/comments/:id', requireAuth, async (req, res) => {
   try {
     const db = await readComments();
     const filtered = db.comments.filter(c => c.id !== req.params.id);

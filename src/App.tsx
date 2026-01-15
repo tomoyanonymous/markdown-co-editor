@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import Editor from './components/Editor';
 import Preview from './components/Preview';
 import CommentPanel from './components/CommentPanel';
-import type { Comment } from '../types/shared';
+import type { Comment, UserInfo } from '../types/shared';
 import './App.css';
 
 function App() {
@@ -11,12 +11,21 @@ function App() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [currentFile, setCurrentFile] = useState<string>('sample.md');
   const [availableFiles, setAvailableFiles] = useState<string[]>([]);
+  const [currentUser, setCurrentUser] = useState<UserInfo | null>(null);
   const [selectedRange, setSelectedRange] = useState<{
     startLine: number;
     startColumn: number;
     endLine: number;
     endColumn: number;
   } | null>(null);
+
+  // Load current user info
+  useEffect(() => {
+    fetch('/api/user')
+      .then(res => res.json())
+      .then(user => setCurrentUser(user))
+      .catch(err => console.error('Failed to load user info:', err));
+  }, []);
 
   // Load available files
   useEffect(() => {
@@ -77,14 +86,13 @@ function App() {
       .catch(err => console.error('Failed to load comments:', err));
   }, [currentFile]);
 
-  const handleAddComment = async (text: string, author: string) => {
+  const handleAddComment = async (text: string) => {
     if (!selectedRange) return;
 
     const newComment = {
       markdownFile: currentFile,
       ...selectedRange,
       text,
-      author,
       resolved: false,
     };
 
@@ -138,17 +146,25 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1>Markdown Co-Editor</h1>
-        <div className="file-selector">
-          <label htmlFor="file-select">File: </label>
-          <select 
-            id="file-select"
-            value={currentFile} 
-            onChange={(e) => setCurrentFile(e.target.value)}
-          >
-            {availableFiles.map(file => (
-              <option key={file} value={file}>{file}</option>
-            ))}
-          </select>
+        <div className="header-right">
+          {currentUser && (
+            <div className="user-info">
+              <span className="user-icon">👤</span>
+              <span className="user-name">{currentUser.name || currentUser.email}</span>
+            </div>
+          )}
+          <div className="file-selector">
+            <label htmlFor="file-select">File: </label>
+            <select 
+              id="file-select"
+              value={currentFile} 
+              onChange={(e) => setCurrentFile(e.target.value)}
+            >
+              {availableFiles.map(file => (
+                <option key={file} value={file}>{file}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </header>
       
@@ -169,6 +185,7 @@ function App() {
           <CommentPanel
             comments={comments}
             selectedRange={selectedRange}
+            currentUser={currentUser}
             onAddComment={handleAddComment}
             onResolveComment={handleResolveComment}
             onDeleteComment={handleDeleteComment}
