@@ -43,7 +43,11 @@ export function initializeCloudflareAuth(): void {
     
     // In non-production, log a warning and continue
     console.warn('Warning:', errorMsg);
-    console.warn('Cloudflare Access authentication will be disabled. Set CF_ACCESS_ENABLED=false to suppress this warning.');
+    console.warn('Please set these environment variables in your .env file:');
+    console.warn('  CF_ACCESS_TEAM_DOMAIN=yourteam.cloudflareaccess.com');
+    console.warn('  CF_ACCESS_AUD=your-application-aud-tag');
+    console.warn('Or set CF_ACCESS_ENABLED=false to disable Cloudflare Access authentication.');
+    console.warn('Continuing with authentication disabled for development...');
     return;
   }
   
