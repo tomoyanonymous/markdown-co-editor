@@ -217,3 +217,100 @@
 .delete-button:hover {
   background-color: #c82333;
 }
+
+.edit-button,
+.reply-button {
+  padding: 0.25rem 0.5rem;
+  border: none;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.edit-button {
+  background-color: #6c757d;
+  color: white;
+}
+
+.edit-button:hover {
+  background-color: #5a6268;
+}
+
+.reply-button {
+  background-color: #17a2b8;
+  color: white;
+}
+
+.reply-button:hover {
+  background-color: #138496;
+}
+
+.save-button,
+.cancel-button {
+  padding: 0.4rem 0.8rem;
+  border: none;
+  border-radius: 3px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.save-button {
+  background-color: #28a745;
+  color: white;
+}
+
+.save-button:hover {
+  background-color: #218838;
+}
+
+.cancel-button {
+  background-color: #6c757d;
+  color: white;
+}
+
+.cancel-button:hover {
+  background-color: #5a6268;
+}
+
+.comment-edit-form {
+  margin-bottom: 0.5rem;
+}
+
+.edit-actions,
+.reply-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.edited-info {
+  font-size: 0.75rem;
+  color: #6c757d;
+  font-style: italic;
+  margin-bottom: 0.5rem;
+}
+
+.reply-form {
+  margin: 0.5rem 0 0 1rem;
+  padding: 0.75rem;
+  background-color: #f0f8ff;
+  border-left: 3px solid #17a2b8;
+  border-radius: 4px;
+}
+
+.comment-thread {
+  margin-bottom: 0.75rem;
+}
+
+.comment-replies {
+  margin-left: 1.5rem;
+  margin-top: 0.5rem;
+  border-left: 2px solid #dee2e6;
+  padding-left: 0.75rem;
+}
+
+.comment-reply .comment-item {
+  margin-bottom: 0.5rem;
+}
