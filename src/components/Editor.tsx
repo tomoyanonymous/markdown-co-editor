@@ -16,6 +16,7 @@ interface EditorProps {
 
 function Editor({ content, onSelectionChange, comments }: EditorProps) {
   const editorRef = useRef<any>(null);
+  const decorationsRef = useRef<string[]>([]);
 
   function handleEditorDidMount(editor: any) {
     editorRef.current = editor;
@@ -48,7 +49,7 @@ function Editor({ content, onSelectionChange, comments }: EditorProps) {
 
   function updateDecorations(editor: any, comments: Comment[]) {
     const decorations = comments
-      .filter(c => !c.resolved)
+      .filter(c => !c.resolved && !c.inReplyTo)
       .map(comment => ({
         range: {
           startLineNumber: comment.startLine,
@@ -66,7 +67,7 @@ function Editor({ content, onSelectionChange, comments }: EditorProps) {
         },
       }));
 
-    editor.deltaDecorations([], decorations);
+    decorationsRef.current = editor.deltaDecorations(decorationsRef.current, decorations);
   }
 
   return (
