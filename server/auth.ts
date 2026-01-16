@@ -16,30 +16,55 @@ declare global {
   }
 }
 
+// Singleton JWKS client instance for JWT verification
+let jwksClientInstance: jwksClient.JwksClient | null = null;
+let cloudflareConfig: { teamDomain: string; aud: string; certsUrl: string } | null = null;
+
+/**
+ * Initialize Cloudflare Access JWT verification
+ * Should be called once at application startup
+ */
+export function initializeCloudflareAuth(): void {
+  const teamDomain = process.env.CF_ACCESS_TEAM_DOMAIN;
+  const aud = process.env.CF_ACCESS_AUD;
+  
+  // Only initialize if CF_ACCESS_ENABLED is true and we're in production
+  if (process.env.CF_ACCESS_ENABLED !== 'true' || process.env.NODE_ENV !== 'production') {
+    return;
+  }
+  
+  if (!teamDomain || !aud) {
+    throw new Error('CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD must be set when CF_ACCESS_ENABLED is true');
+  }
+  
+  // Cloudflare Access uses JWKS (JSON Web Key Set) for token verification
+  // The JWKS endpoint is at https://<team-domain>/cdn-cgi/access/certs
+  const certsUrl = `https://${teamDomain}/cdn-cgi/access/certs`;
+  
+  jwksClientInstance = jwksClient({
+    jwksUri: certsUrl,
+    cache: true,
+    cacheMaxAge: 86400000, // 24 hours
+    rateLimit: true,
+    jwksRequestsPerMinute: 10,
+  });
+  
+  cloudflareConfig = { teamDomain, aud, certsUrl };
+  
+  console.log('Cloudflare Access JWT verification initialized');
+}
+
 /**
  * Verify Cloudflare Access JWT token
  * @param token - The JWT token from CF-Access-JWT-Assertion header
- * @param teamDomain - Your Cloudflare Access team domain (e.g., yourteam.cloudflareaccess.com)
- * @param aud - The Application Audience (AUD) tag from Cloudflare Access policy
  */
-async function verifyCloudflareAccessJWT(
-  token: string,
-  teamDomain: string,
-  aud: string
-): Promise<boolean> {
+async function verifyCloudflareAccessJWT(token: string): Promise<boolean> {
+  if (!jwksClientInstance || !cloudflareConfig) {
+    console.error('Cloudflare Access JWT verification not initialized');
+    return false;
+  }
+  
   try {
-    // Cloudflare Access uses JWKS (JSON Web Key Set) for token verification
-    // The JWKS endpoint is at https://<team-domain>/cdn-cgi/access/certs
-    const certsUrl = `https://${teamDomain}/cdn-cgi/access/certs`;
-    
-    const client = jwksClient({
-      jwksUri: certsUrl,
-      cache: true,
-      cacheMaxAge: 86400000, // 24 hours
-      rateLimit: true,
-      jwksRequestsPerMinute: 10,
-    });
-    
     // Decode the token to get the kid (key id)
     const decoded = jwt.decode(token, { complete: true });
     if (!decoded || typeof decoded === 'string' || !decoded.header.kid) {
@@ -48,13 +73,13 @@ async function verifyCloudflareAccessJWT(
     }
     
     // Get the signing key
-    const key = await client.getSigningKey(decoded.header.kid);
+    const key = await jwksClientInstance.getSigningKey(decoded.header.kid);
     const signingKey = key.getPublicKey();
     
     // Verify the token
     const verified = jwt.verify(token, signingKey, {
-      audience: aud,
-      issuer: certsUrl,
+      audience: cloudflareConfig.aud,
+      issuer: cloudflareConfig.certsUrl,
     });
     
     return !!verified;
@@ -93,20 +118,8 @@ export async function cloudflareAccessAuth(req: Request, res: Response, next: Ne
   }
 
   // In production with Cloudflare Access, validate the JWT
-  // Validate JWT token using Cloudflare's public keys
-  const teamDomain = process.env.CF_ACCESS_TEAM_DOMAIN;
-  const aud = process.env.CF_ACCESS_AUD;
-  
-  if (!teamDomain || !aud) {
-    console.error('CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD must be set when CF_ACCESS_ENABLED is true');
-    return res.status(500).json({ 
-      error: 'Server configuration error',
-      message: 'Cloudflare Access is not properly configured' 
-    });
-  }
-  
-  // Verify the JWT token
-  const isValid = await verifyCloudflareAccessJWT(cfAccessJWT, teamDomain, aud);
+  // Verify the JWT token using Cloudflare's public keys
+  const isValid = await verifyCloudflareAccessJWT(cfAccessJWT);
   
   if (!isValid) {
     return res.status(401).json({ 
