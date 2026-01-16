@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import chokidar from 'chokidar';
 import type { Comment, CommentDatabase, RenderRequest, RenderResponse, UserInfo } from '../types/shared.js';
-import { cloudflareAccessAuth, requireAuth } from './auth.js';
+import { cloudflareAccessAuth, requireAuth, initializeCloudflareAuth } from './auth.js';
 
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
@@ -448,6 +448,14 @@ async function performGitPull(): Promise<void> {
 
 // Start server
 async function startServer() {
+  // Initialize Cloudflare Access JWT verification
+  try {
+    initializeCloudflareAuth();
+  } catch (error) {
+    console.error('Failed to initialize Cloudflare Access authentication:', error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
+  
   await initializeDataFiles();
   
   app.listen(PORT, () => {
