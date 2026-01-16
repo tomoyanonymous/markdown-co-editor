@@ -18,7 +18,7 @@ declare global {
 
 // Singleton JWKS client instance for JWT verification
 let jwksClientInstance: jwksClient.JwksClient | null = null;
-let cloudflareConfig: { teamDomain: string; aud: string; certsUrl: string } | null = null;
+let cloudflareConfig: { teamDomain: string; aud: string; certsUrl: string; issuerUrl: string } | null = null;
 
 /**
  * Initialize Cloudflare Access JWT verification
@@ -41,6 +41,9 @@ export function initializeCloudflareAuth(): void {
   // The JWKS endpoint is at https://<team-domain>/cdn-cgi/access/certs
   const certsUrl = `https://${teamDomain}/cdn-cgi/access/certs`;
   
+  // The issuer URL format for Cloudflare Access
+  const issuerUrl = `https://${teamDomain}`;
+  
   jwksClientInstance = jwksClient({
     jwksUri: certsUrl,
     cache: true,
@@ -49,7 +52,7 @@ export function initializeCloudflareAuth(): void {
     jwksRequestsPerMinute: 10,
   });
   
-  cloudflareConfig = { teamDomain, aud, certsUrl };
+  cloudflareConfig = { teamDomain, aud, certsUrl, issuerUrl };
   
   console.log('Cloudflare Access JWT verification initialized');
 }
@@ -79,7 +82,7 @@ async function verifyCloudflareAccessJWT(token: string): Promise<boolean> {
     // Verify the token
     const verified = jwt.verify(token, signingKey, {
       audience: cloudflareConfig.aud,
-      issuer: cloudflareConfig.certsUrl,
+      issuer: cloudflareConfig.issuerUrl,
     });
     
     return !!verified;
