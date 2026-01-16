@@ -13,6 +13,7 @@ services:
       - CF_ACCESS_ENABLED=${CF_ACCESS_ENABLED:-false}
       - CF_ACCESS_TEAM_DOMAIN=${CF_ACCESS_TEAM_DOMAIN}
       - CF_ACCESS_AUD=${CF_ACCESS_AUD}
+      - CF_ACCESS_CERTS_URL=${CF_ACCESS_CERTS_URL}
       # Development user (only used when CF_ACCESS_ENABLED=false)
       - DEV_USER_EMAIL=${DEV_USER_EMAIL:-dev@example.com}
       - DEV_USER_NAME=${DEV_USER_NAME:-Development User}

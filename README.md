@@ -270,6 +270,7 @@ DEV_USER_NAME=Your Name
 # CF_ACCESS_ENABLED=true
 # CF_ACCESS_TEAM_DOMAIN=yourteam.cloudflareaccess.com
 # CF_ACCESS_AUD=your-application-aud-tag
+# CF_ACCESS_CERTS_URL=https://yourorg.cloudflareaccess.com/cdn-cgi/access/certs # Optional: if different from team domain
 ```
 
 **重要**: `.env`ファイルに設定した環境変数は`docker-compose.yml`を通じてコンテナに渡されます。`CF_ACCESS_ENABLED=true`に設定する場合は、必ず`CF_ACCESS_TEAM_DOMAIN`と`CF_ACCESS_AUD`も設定してください。
@@ -316,6 +317,17 @@ docker-compose down
    CF_ACCESS_TEAM_DOMAIN=yourteam.cloudflareaccess.com
    CF_ACCESS_AUD=your-application-aud-tag
    ```
+   
+   **注意**: アプリケーションドメインとJWT証明書取得URLが異なる場合は、`CF_ACCESS_CERTS_URL`を追加設定してください：
+   
+   ```bash
+   CF_ACCESS_ENABLED=true
+   CF_ACCESS_TEAM_DOMAIN=md.yourapp.com
+   CF_ACCESS_AUD=your-application-aud-tag
+   CF_ACCESS_CERTS_URL=https://yourorg.cloudflareaccess.com/cdn-cgi/access/certs
+   ```
+   
+   `CF_ACCESS_CERTS_URL`が設定されていない場合、デフォルトで`https://<CF_ACCESS_TEAM_DOMAIN>/cdn-cgi/access/certs`が使用されます。
 
 3. **アプリケーションの再起動**
    
