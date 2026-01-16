@@ -27,6 +27,7 @@ let cloudflareConfig: { teamDomain: string; aud: string; certsUrl: string; issue
 export function initializeCloudflareAuth(): void {
   const teamDomain = process.env.CF_ACCESS_TEAM_DOMAIN;
   const aud = process.env.CF_ACCESS_AUD;
+  const customCertsUrl = process.env.CF_ACCESS_CERTS_URL;
   
   // Only initialize if CF_ACCESS_ENABLED is true
   if (process.env.CF_ACCESS_ENABLED !== 'true') {
@@ -52,8 +53,9 @@ export function initializeCloudflareAuth(): void {
   }
   
   // Cloudflare Access uses JWKS (JSON Web Key Set) for token verification
-  // The JWKS endpoint is at https://<team-domain>/cdn-cgi/access/certs
-  const certsUrl = `https://${teamDomain}/cdn-cgi/access/certs`;
+  // The JWKS endpoint can be specified separately via CF_ACCESS_CERTS_URL,
+  // or defaults to https://<team-domain>/cdn-cgi/access/certs
+  const certsUrl = customCertsUrl || `https://${teamDomain}/cdn-cgi/access/certs`;
   
   // The issuer URL format for Cloudflare Access
   const issuerUrl = `https://${teamDomain}`;
@@ -69,6 +71,7 @@ export function initializeCloudflareAuth(): void {
   cloudflareConfig = { teamDomain, aud, certsUrl, issuerUrl };
   
   console.log('Cloudflare Access JWT verification initialized');
+  console.log(`  JWT Certs URL: ${certsUrl}`);
 }
 
 /**
