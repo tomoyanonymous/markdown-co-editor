@@ -9,9 +9,20 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
+      # Cloudflare Access configuration
       - CF_ACCESS_ENABLED=${CF_ACCESS_ENABLED:-false}
+      - CF_ACCESS_TEAM_DOMAIN=${CF_ACCESS_TEAM_DOMAIN}
+      - CF_ACCESS_AUD=${CF_ACCESS_AUD}
+      # Development user (only used when CF_ACCESS_ENABLED=false)
       - DEV_USER_EMAIL=${DEV_USER_EMAIL:-dev@example.com}
       - DEV_USER_NAME=${DEV_USER_NAME:-Development User}
+      # Git sync configuration (optional)
+      # WARNING: GIT_ACCESS_TOKEN contains sensitive credentials. 
+      # For production, consider using Docker secrets or a secrets management service.
+      - GIT_REPO_URL=${GIT_REPO_URL}
+      - GIT_USERNAME=${GIT_USERNAME}
+      - GIT_ACCESS_TOKEN=${GIT_ACCESS_TOKEN}
+      - GIT_PULL_INTERVAL=${GIT_PULL_INTERVAL}
     volumes:
       # Mount data directory for persistent storage
       - ./data:/app/data

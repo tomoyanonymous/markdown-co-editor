@@ -266,11 +266,13 @@ CF_ACCESS_ENABLED=false
 DEV_USER_EMAIL=your@example.com
 DEV_USER_NAME=Your Name
 
-# 本番環境（Cloudflare Access有効）の場合
+# 本番環境（Cloudflare Access有効）の場合は以下のコメントを外して設定
 # CF_ACCESS_ENABLED=true
 # CF_ACCESS_TEAM_DOMAIN=yourteam.cloudflareaccess.com
 # CF_ACCESS_AUD=your-application-aud-tag
 ```
+
+**重要**: `.env`ファイルに設定した環境変数は`docker-compose.yml`を通じてコンテナに渡されます。`CF_ACCESS_ENABLED=true`に設定する場合は、必ず`CF_ACCESS_TEAM_DOMAIN`と`CF_ACCESS_AUD`も設定してください。
 
 ### 2. Docker Composeで起動
 

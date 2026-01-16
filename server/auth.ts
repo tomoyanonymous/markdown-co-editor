@@ -28,13 +28,27 @@ export function initializeCloudflareAuth(): void {
   const teamDomain = process.env.CF_ACCESS_TEAM_DOMAIN;
   const aud = process.env.CF_ACCESS_AUD;
   
-  // Only initialize if CF_ACCESS_ENABLED is true and we're in production
-  if (process.env.CF_ACCESS_ENABLED !== 'true' || process.env.NODE_ENV !== 'production') {
+  // Only initialize if CF_ACCESS_ENABLED is true
+  if (process.env.CF_ACCESS_ENABLED !== 'true') {
     return;
   }
   
   if (!teamDomain || !aud) {
-    throw new Error('CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD must be set when CF_ACCESS_ENABLED is true');
+    const errorMsg = 'CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD must be set when CF_ACCESS_ENABLED is true';
+    
+    // In production, this is a fatal error
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(errorMsg);
+    }
+    
+    // In non-production, log a warning and continue
+    console.warn('Warning:', errorMsg);
+    console.warn('Please set these environment variables in your .env file:');
+    console.warn('  CF_ACCESS_TEAM_DOMAIN=yourteam.cloudflareaccess.com');
+    console.warn('  CF_ACCESS_AUD=your-application-aud-tag');
+    console.warn('Or set CF_ACCESS_ENABLED=false to disable Cloudflare Access authentication.');
+    console.warn('Continuing with authentication disabled for development...');
+    return;
   }
   
   // Cloudflare Access uses JWKS (JSON Web Key Set) for token verification
