@@ -58,7 +58,20 @@ export function initializeCloudflareAuth(): void {
   const certsUrl = customCertsUrl || `https://${teamDomain}/cdn-cgi/access/certs`;
   
   // The issuer URL format for Cloudflare Access
-  const issuerUrl = `https://${teamDomain}`;
+  // If a custom certs URL is provided, extract the issuer from it
+  // Otherwise, use the team domain
+  let issuerUrl: string;
+  if (customCertsUrl) {
+    try {
+      const url = new URL(customCertsUrl);
+      issuerUrl = `${url.protocol}//${url.host}`;
+    } catch (error) {
+      console.error('Invalid CF_ACCESS_CERTS_URL format, falling back to team domain:', error);
+      issuerUrl = `https://${teamDomain}`;
+    }
+  } else {
+    issuerUrl = `https://${teamDomain}`;
+  }
   
   jwksClientInstance = jwksClient({
     jwksUri: certsUrl,
@@ -72,6 +85,7 @@ export function initializeCloudflareAuth(): void {
   
   console.log('Cloudflare Access JWT verification initialized');
   console.log(`  JWT Certs URL: ${certsUrl}`);
+  console.log(`  JWT Issuer URL: ${issuerUrl}`);
 }
 
 /**
