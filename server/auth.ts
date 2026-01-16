@@ -64,7 +64,7 @@ export function initializeCloudflareAuth(): void {
   if (customCertsUrl) {
     try {
       const url = new URL(customCertsUrl);
-      issuerUrl = `${url.protocol}//${url.hostname}`;
+      issuerUrl = `${url.protocol}//${url.host}`;
     } catch (error) {
       console.error('Invalid CF_ACCESS_CERTS_URL format, falling back to team domain:', error);
       issuerUrl = `https://${teamDomain}`;
