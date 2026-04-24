@@ -105,18 +105,11 @@ function sortMarkdownFiles(files: string[]): string[] {
   });
 }
 
-// Initialize data directory and comments file
+// Initialize the active content directory without populating it.
+// This keeps the directory clone-friendly on first startup.
 async function initializeDataFiles() {
   try {
     await fs.mkdir(CONTENT_DIR, { recursive: true });
-    
-    try {
-      await fs.access(COMMENTS_FILE);
-    } catch {
-      const initialData: CommentDatabase = { comments: [] };
-      await fs.writeFile(COMMENTS_FILE, JSON.stringify(initialData, null, 2));
-      console.log('Created comments.json');
-    }
   } catch (error) {
     console.error('Error initializing data files:', error);
   }
@@ -128,6 +121,10 @@ async function readComments(): Promise<CommentDatabase> {
     const data = await fs.readFile(COMMENTS_FILE, 'utf-8');
     return JSON.parse(data);
   } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { comments: [] };
+    }
+
     console.error('Error reading comments:', error);
     return { comments: [] };
   }
@@ -136,7 +133,9 @@ async function readComments(): Promise<CommentDatabase> {
 // Write comments to JSON file
 async function writeComments(db: CommentDatabase): Promise<void> {
   try {
+    await fs.mkdir(CONTENT_DIR, { recursive: true });
     await fs.writeFile(COMMENTS_FILE, JSON.stringify(db, null, 2));
+    console.log('Saved comments.json');
   } catch (error) {
     console.error('Error writing comments:', error);
     throw error;

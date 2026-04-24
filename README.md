@@ -58,7 +58,7 @@ npm install
 
 - `*.md` - Markdownソースファイル
 - `*.bib` - BibTeX形式の文献データベース
-- `comments.json` - コメント履歴（自動生成）
+- `comments.json` - コメント履歴（初回コメント保存時に自動生成）
 
 `GIT_REPO_URL`が未設定なら、既存の`data/`内サンプルファイルがそのまま表示されます。別リポジトリを共同編集したい場合は、そのリポジトリのチェックアウト済みディレクトリを`content/`としてマウントするか、`content/`配下へ配置して起動してください。
 
@@ -120,7 +120,7 @@ npm run dev
    ```bash
    git clone https://github.com/username/repository.git ./content
    ```
-    Docker Composeを使う場合は、ベースの`docker-compose.yml`を直接編集する代わりに、ローカル用の`docker-compose.override.yml`で`/app/content`のマウント先だけ上書きすると扱いやすくなります。`comments.json`もこの`content/`配下に生成・更新され、同じリポジトリへコミットされます。
+   Docker Composeを使う場合は、ベースの`docker-compose.yml`を直接編集する代わりに、ローカル用の`docker-compose.override.yml`で`/app/content`のマウント先だけ上書きすると扱いやすくなります。`comments.json`も初回コメント保存時にこの`content/`配下へ生成され、その後は同じリポジトリへコミットされます。
 
     ```yaml
     services:
