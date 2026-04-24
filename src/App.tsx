@@ -5,12 +5,56 @@ import CommentPanel from './components/CommentPanel';
 import type { Comment, UserInfo } from '../types/shared';
 import './App.css';
 
+const FILE_ROUTE_PREFIX = '/files';
+
+function buildFileRoute(filePath: string): string {
+  if (!filePath) {
+    return '/';
+  }
+
+  const encodedPath = filePath
+    .split('/')
+    .filter(Boolean)
+    .map(segment => encodeURIComponent(segment))
+    .join('/');
+
+  return `${FILE_ROUTE_PREFIX}/${encodedPath}`;
+}
+
+function getRequestedFileFromLocation(pathname: string): string {
+  if (pathname === '/' || pathname === FILE_ROUTE_PREFIX || pathname === `${FILE_ROUTE_PREFIX}/`) {
+    return '';
+  }
+
+  if (!pathname.startsWith(`${FILE_ROUTE_PREFIX}/`)) {
+    return '';
+  }
+
+  return pathname
+    .slice(FILE_ROUTE_PREFIX.length + 1)
+    .split('/')
+    .filter(Boolean)
+    .map(segment => decodeURIComponent(segment))
+    .join('/');
+}
+
+function syncBrowserRoute(filePath: string, mode: 'push' | 'replace'): void {
+  const nextPath = buildFileRoute(filePath);
+
+  if (window.location.pathname === nextPath) {
+    return;
+  }
+
+  window.history[mode === 'push' ? 'pushState' : 'replaceState'](null, '', nextPath);
+}
+
 function App() {
   const [markdownContent, setMarkdownContent] = useState<string>('');
   const [htmlContent, setHtmlContent] = useState<string>('');
   const [isRendering, setIsRendering] = useState<boolean>(false);
   const [comments, setComments] = useState<Comment[]>([]);
   const [currentFile, setCurrentFile] = useState<string>('');
+  const [requestedFile, setRequestedFile] = useState<string>(() => getRequestedFileFromLocation(window.location.pathname));
   const [availableFiles, setAvailableFiles] = useState<string[]>([]);
   const [currentUser, setCurrentUser] = useState<UserInfo | null>(null);
   const [displayName, setDisplayName] = useState<string>('');
@@ -34,26 +78,48 @@ function App() {
       .catch(err => console.error('Failed to load user info:', err));
   }, []);
 
+  useEffect(() => {
+    const handlePopState = () => {
+      setRequestedFile(getRequestedFileFromLocation(window.location.pathname));
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
+
   // Load available files
   useEffect(() => {
     fetch('/api/files')
       .then(res => res.json())
       .then(files => {
         setAvailableFiles(files);
-        setCurrentFile(previousFile => {
-          if (files.length === 0) {
-            return '';
-          }
-
-          if (previousFile && files.includes(previousFile)) {
-            return previousFile;
-          }
-
-          return files[0];
-        });
       })
       .catch(err => console.error('Failed to load files:', err));
   }, []);
+
+  useEffect(() => {
+    if (availableFiles.length === 0) {
+      setCurrentFile('');
+      syncBrowserRoute('', 'replace');
+      return;
+    }
+
+    if (requestedFile && availableFiles.includes(requestedFile)) {
+      setCurrentFile(requestedFile);
+      return;
+    }
+
+    const fallbackFile = currentFile && availableFiles.includes(currentFile)
+      ? currentFile
+      : availableFiles[0];
+
+    setCurrentFile(fallbackFile);
+    setRequestedFile(fallbackFile);
+    syncBrowserRoute(fallbackFile, 'replace');
+  }, [availableFiles, currentFile, requestedFile]);
 
   // Load markdown content
   useEffect(() => {
@@ -235,6 +301,12 @@ function App() {
     }
   };
 
+  const handleFileChange = (nextFile: string) => {
+    setRequestedFile(nextFile);
+    setCurrentFile(nextFile);
+    syncBrowserRoute(nextFile, 'push');
+  };
+
   return (
     <div className="app">
       <header className="app-header">
@@ -258,7 +330,7 @@ function App() {
             <select 
               id="file-select"
               value={currentFile} 
-              onChange={(e) => setCurrentFile(e.target.value)}
+              onChange={(e) => handleFileChange(e.target.value)}
             >
               {availableFiles.map(file => (
                 <option key={file} value={file}>{file}</option>
