@@ -10,7 +10,7 @@ function App() {
   const [htmlContent, setHtmlContent] = useState<string>('');
   const [isRendering, setIsRendering] = useState<boolean>(false);
   const [comments, setComments] = useState<Comment[]>([]);
-  const [currentFile, setCurrentFile] = useState<string>('sample.md');
+  const [currentFile, setCurrentFile] = useState<string>('');
   const [availableFiles, setAvailableFiles] = useState<string[]>([]);
   const [currentUser, setCurrentUser] = useState<UserInfo | null>(null);
   const [displayName, setDisplayName] = useState<string>('');
@@ -40,18 +40,29 @@ function App() {
       .then(res => res.json())
       .then(files => {
         setAvailableFiles(files);
-        if (files.length > 0 && !currentFile) {
-          setCurrentFile(files[0]);
-        }
+        setCurrentFile(previousFile => {
+          if (files.length === 0) {
+            return '';
+          }
+
+          if (previousFile && files.includes(previousFile)) {
+            return previousFile;
+          }
+
+          return files[0];
+        });
       })
       .catch(err => console.error('Failed to load files:', err));
   }, []);
 
   // Load markdown content
   useEffect(() => {
-    if (!currentFile) return;
+    if (!currentFile) {
+      setMarkdownContent('');
+      return;
+    }
 
-    fetch(`/api/markdown/${currentFile}`)
+    fetch(`/api/markdown?filename=${encodeURIComponent(currentFile)}`)
       .then(res => res.json())
       .then(data => setMarkdownContent(data.content))
       .catch(err => console.error('Failed to load markdown:', err));
@@ -59,7 +70,10 @@ function App() {
 
   // Render markdown to HTML
   useEffect(() => {
-    if (!currentFile) return;
+    if (!currentFile) {
+      setHtmlContent('<p>No markdown file available.</p>');
+      return;
+    }
 
     setIsRendering(true);
     fetch('/api/render', {
@@ -89,9 +103,12 @@ function App() {
 
   // Load comments
   useEffect(() => {
-    if (!currentFile) return;
+    if (!currentFile) {
+      setComments([]);
+      return;
+    }
 
-    fetch(`/api/comments/${currentFile}`)
+    fetch(`/api/comments?markdownFile=${encodeURIComponent(currentFile)}`)
       .then(res => res.json())
       .then(data => setComments(data))
       .catch(err => console.error('Failed to load comments:', err));

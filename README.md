@@ -47,15 +47,20 @@ sudo apt-get install pandoc pandoc-citeproc
 npm install
 ```
 
-### 2. データディレクトリの準備
+### 2. コンテンツディレクトリの準備
 
-`data/`ディレクトリには以下のファイルが配置されます：
+通常は以下の2系統を使い分けます：
+
+- `data/` - `GIT_REPO_URL`未設定時のフォールバック用サンプルデータ
+- `content/` - 管理対象書類のGitリポジトリをマウントまたは配置するディレクトリ
+
+`content/`または`data/`には以下のファイルが配置されます：
 
 - `*.md` - Markdownソースファイル
 - `*.bib` - BibTeX形式の文献データベース
 - `comments.json` - コメント履歴（自動生成）
 
-サンプルファイルが既に含まれているので、すぐに試すことができます。
+`GIT_REPO_URL`が未設定なら、既存の`data/`内サンプルファイルがそのまま表示されます。別リポジトリを共同編集したい場合は、そのリポジトリのチェックアウト済みディレクトリを`content/`としてマウントするか、`content/`配下へ配置して起動してください。
 
 ### 3. アプリケーションの起動
 
@@ -96,7 +101,7 @@ npm run dev
 
 ### コメント引用の使用
 
-1. `data/references.bib`にBibTeX形式で文献情報を追加
+1. 利用中のコンテンツルート（`content/`優先、未設定時は`data/`）にある`references.bib`へBibTeX形式で文献情報を追加
 2. Markdownファイル内で `[@citation-key]` の形式で引用
 3. Pandocが自動的に文献リストを生成
 
@@ -111,18 +116,33 @@ npm run dev
    GIT_ACCESS_TOKEN=your-github-personal-access-token
    ```
 
-2. **同期の実行**：
+2. **管理対象リポジトリを`content/`として利用可能にする**：
+   ```bash
+   git clone https://github.com/username/repository.git ./content
+   ```
+    Docker Composeを使う場合は、ベースの`docker-compose.yml`を直接編集する代わりに、ローカル用の`docker-compose.override.yml`で`/app/content`のマウント先だけ上書きすると扱いやすくなります。`comments.json`もこの`content/`配下に生成・更新され、同じリポジトリへコミットされます。
+
+    ```yaml
+    services:
+       markdown-editor:
+          volumes:
+             - /srv/book-a:/app/content
+    ```
+
+    上のような`docker-compose.override.yml`を置くと、`docker compose up -d`または`docker-compose up -d`で自動的に読み込まれます。雛形として`docker-compose.override.yml.example`も用意しています。
+
+3. **同期の実行**：
    - ヘッダーの「Sync」ボタンをクリック
-   - コメントの変更が自動的にコミットされ、リモートリポジトリにプッシュされる
+   - `content/comments.json`の変更が自動的にコミットされ、リモートリポジトリにプッシュされる
    - 同期が成功すると、成功メッセージが表示される
 
-3. **自動プル機能**：
+4. **自動プル機能**：
    - サーバーは定期的にリモートリポジトリから変更をプルします
    - デフォルトでは5分間隔で自動プルが実行されます
    - `GIT_PULL_INTERVAL`環境変数でプル間隔をミリ秒単位で設定可能（例：`300000`で5分）
    - 他のユーザーが行った変更を自動的に取り込むことができます
 
-4. **注意点**：
+5. **注意点**：
    - 環境変数が設定されていない場合は、エラーメッセージが表示される
    - 変更がない場合は「No changes to sync」と表示される
    - GitHubのPersonal Access Tokenは`repo`スコープが必要
@@ -146,16 +166,21 @@ markdown-co-editor/
 │   └── auth.ts             # Cloudflare Access認証ミドルウェア
 ├── types/                  # TypeScript型定義
 │   └── shared.ts           # 共有型定義
-├── data/                   # データファイル
+├── data/                   # フォールバック用サンプルデータ
 │   ├── *.md                # Markdownファイル
 │   ├── *.bib               # BibTeX文献データベース
-│   └── comments.json       # コメント履歴（Git管理対象）
+│   └── comments.json       # コメント履歴（フォールバック時のみ利用）
+├── content/                # 管理対象書類のGitリポジトリをマウントする作業ディレクトリ
+│   ├── *.md                # Markdownファイル
+│   ├── *.bib               # BibTeX文献データベース
+│   └── comments.json       # コメント履歴（Git同期対象）
 ├── package.json            # プロジェクト設定
 ├── tsconfig.json           # TypeScript設定（フロントエンド）
 ├── tsconfig.server.json    # TypeScript設定（サーバー）
 ├── vite.config.ts          # Vite設定
 ├── Dockerfile              # Dockerイメージビルド定義
 ├── docker-compose.yml      # Docker Composeデプロイ設定
+├── docker-compose.override.yml.example # contentマウント差し替え用の雛形
 └── .env.example            # 環境変数のテンプレート
 ```
 
@@ -168,7 +193,7 @@ markdown-co-editor/
 ### コメント関連
 
 - `GET /api/comments` - 全コメント取得
-- `GET /api/comments/:filename` - 特定ファイルのコメント取得
+   - `markdownFile`クエリを指定すると特定ファイルのコメントのみ取得
 - `POST /api/comments` - コメント追加（要認証）
   - `inReplyTo`フィールドを含めることで、既存のコメントへの返信として追加可能
 - `PUT /api/comments/:id` - コメント更新（要認証）
@@ -184,7 +209,8 @@ markdown-co-editor/
 ### ファイル関連
 
 - `GET /api/files` - 利用可能なMarkdownファイル一覧
-- `GET /api/markdown/:filename` - Markdownファイル内容取得
+   - 戻り値はコンテンツルートからの相対パス
+- `GET /api/markdown?filename=...` - Markdownファイル内容取得
 - `POST /api/render` - Markdownをレンダリング（Pandoc使用）
 
 ## 開発
@@ -210,12 +236,12 @@ npm start
 
 ## Gitでの履歴管理
 
-`data/comments.json`ファイルをGitリポジトリで管理することで、コメントの履歴を追跡できます。
+`GIT_REPO_URL`を設定した場合、`content/comments.json`を管理対象リポジトリで管理することで、コメントの履歴を追跡できます。`GIT_REPO_URL`未設定時は`data/comments.json`にフォールバックします。同じコンテナイメージでも、デプロイごとに別のホスト側リポジトリを`/app/content`へマウントすれば、別々のコンテンツを管理できます。
 
 ### 手動での同期
 
 ```bash
-git add data/comments.json
+git -C /path/to/content-repo add comments.json
 git commit -m "Add review comments"
 git push
 ```
@@ -223,7 +249,7 @@ git push
 チームメンバーは以下でコメントを同期できます：
 
 ```bash
-git pull
+git -C /path/to/content-repo pull
 ```
 
 ### 自動同期機能
@@ -239,7 +265,7 @@ git pull
 
 2. アプリケーションを再起動
 
-3. ヘッダーの「Sync」ボタンをクリックして同期
+3. `/app/content`にマウントされる対象リポジトリを用意して、ヘッダーの「Sync」ボタンをクリックして同期
 
 ## Dockerでのデプロイ
 
@@ -281,6 +307,10 @@ DEV_USER_NAME=Your Name
 docker-compose up -d
 ```
 
+同じイメージを別の書類リポジトリに使い回したい場合は、`docker-compose.override.yml`で`/app/content`のマウント元だけを各環境の実ディレクトリへ差し替えて起動してください。たとえば`/srv/book-a:/app/content`や`/srv/book-b:/app/content`のように切り替えられます。
+
+常用する場合は、リポジトリに含まれる`docker-compose.override.yml.example`を`docker-compose.override.yml`としてコピーし、`/app/content`のマウント元だけ環境ごとに書き換える運用が簡単です。
+
 アプリケーションは http://localhost:3001 で起動します。
 
 ### 3. ログの確認
@@ -297,7 +327,7 @@ docker-compose down
 
 ### データの永続化
 
-`data/`ディレクトリはホストマシンとコンテナ間でマウントされているため、Markdownファイルとコメント履歴は永続化されます。
+`data/`と`content/`はホストマシンとコンテナ間でマウントできるため、フォールバック用サンプルデータと実運用コンテンツの両方を永続化できます。通常の運用では`content/`側に実際のMarkdownファイルと`comments.json`が保存されます。
 
 ## Cloudflare Accessによる認証
 
@@ -363,7 +393,7 @@ docker-compose down
 - **HTTPS**: Cloudflare経由で必ずHTTPSを使用
 - **レート制限**: 必要に応じてAPIエンドポイントにレート制限を実装
 - **入力検証**: ファイル名とパスの検証を適切に実施
-- **定期的なバックアップ**: `data/`ディレクトリを定期的にバックアップ
+- **定期的なバックアップ**: 実運用では`content/`ディレクトリを定期的にバックアップ
 
 ## ライセンス
 

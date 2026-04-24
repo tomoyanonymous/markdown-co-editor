@@ -17,6 +17,7 @@ dist/**/*.d.ts
 .env
 .env.local
 .env.*.local
+docker-compose.override.yml
 
 # IDE
 .vscode/

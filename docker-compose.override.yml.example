@@ -1,0 +1,5 @@
+services:
+  markdown-editor:
+    volumes:
+      # Override this path per deployment to point at the checked-out content repository.
+      - /srv/book-a:/app/content

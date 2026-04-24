@@ -12,6 +12,9 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Ensure optional runtime directories exist in the build context
+RUN mkdir -p /app/data /app/content
+
 # Build the application
 RUN npm run build
 
@@ -30,10 +33,11 @@ RUN npm ci --only=production
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/data ./data
+COPY --from=builder /app/content ./content
 
-# Create data directory for runtime
-RUN mkdir -p /app/data && \
-    chmod 777 /app/data
+# Create runtime directories
+RUN mkdir -p /app/data /app/content && \
+  chmod 777 /app/data /app/content
 
 # Expose port
 EXPOSE 3001

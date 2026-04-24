@@ -25,8 +25,10 @@ services:
       - GIT_ACCESS_TOKEN=${GIT_ACCESS_TOKEN}
       - GIT_PULL_INTERVAL=${GIT_PULL_INTERVAL}
     volumes:
-      # Mount data directory for persistent storage
+      # Keep sample fallback data and active managed content separate.
+      # Override only the /app/content mount in docker-compose.override.yml for each deployment.
       - ./data:/app/data
+      - ./content:/app/content
     restart: unless-stopped
     networks:
       - markdown-network

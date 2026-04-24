@@ -36,8 +36,12 @@ if (NODE_ENV === 'production') {
 }
 
 // Paths
-const DATA_DIR = path.join(process.cwd(), 'data');
-const COMMENTS_FILE = path.join(DATA_DIR, 'comments.json');
+const FALLBACK_DATA_DIR = path.join(process.cwd(), 'data');
+const CONTENT_SUBMODULE_DIR = path.join(process.cwd(), 'content');
+const GIT_REPO_URL = process.env.GIT_REPO_URL;
+const CONTENT_DIR = GIT_REPO_URL ? CONTENT_SUBMODULE_DIR : FALLBACK_DATA_DIR;
+const COMMENTS_FILE = path.join(CONTENT_DIR, 'comments.json');
+const DEFAULT_FALLBACK_FILE = 'sample.md';
 
 // Git sync lock to prevent concurrent sync operations
 let isSyncInProgress = false;
@@ -45,10 +49,66 @@ let isSyncInProgress = false;
 // Store interval ID for cleanup
 let gitPullIntervalId: NodeJS.Timeout | null = null;
 
+function normalizeRelativePath(filePath: string): string {
+  return filePath.split(path.sep).join('/');
+}
+
+function resolveContentPath(relativePath: string): string {
+  const sanitizedPath = relativePath.replace(/^[/\\]+/, '');
+  const resolvedPath = path.resolve(CONTENT_DIR, sanitizedPath);
+  const relativeToContent = path.relative(CONTENT_DIR, resolvedPath);
+
+  if (relativeToContent.startsWith('..') || path.isAbsolute(relativeToContent)) {
+    throw new Error('Invalid content path');
+  }
+
+  return resolvedPath;
+}
+
+async function listMarkdownFiles(rootDir: string, relativeDir = ''): Promise<string[]> {
+  const entries = await fs.readdir(path.join(rootDir, relativeDir), { withFileTypes: true });
+  const markdownFiles: string[] = [];
+
+  for (const entry of entries) {
+    if (entry.name === '.git') {
+      continue;
+    }
+
+    const nextRelativePath = path.join(relativeDir, entry.name);
+
+    if (entry.isDirectory()) {
+      markdownFiles.push(...await listMarkdownFiles(rootDir, nextRelativePath));
+      continue;
+    }
+
+    if (entry.isFile() && entry.name.endsWith('.md')) {
+      markdownFiles.push(normalizeRelativePath(nextRelativePath));
+    }
+  }
+
+  return markdownFiles;
+}
+
+function sortMarkdownFiles(files: string[]): string[] {
+  return [...files].sort((left, right) => {
+    if (!GIT_REPO_URL) {
+      if (left === DEFAULT_FALLBACK_FILE) {
+        return -1;
+      }
+
+      if (right === DEFAULT_FALLBACK_FILE) {
+        return 1;
+      }
+    }
+
+    return left.localeCompare(right);
+  });
+}
+
 // Initialize data directory and comments file
 async function initializeDataFiles() {
   try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.mkdir(CONTENT_DIR, { recursive: true });
     
     try {
       await fs.access(COMMENTS_FILE);
@@ -99,20 +159,16 @@ app.get('/api/user', requireAuth, (req, res) => {
 app.get('/api/comments', async (_req, res) => {
   try {
     const db = await readComments();
-    res.json(db.comments);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to read comments' });
-  }
-});
+    const markdownFile = typeof _req.query.markdownFile === 'string'
+      ? _req.query.markdownFile
+      : undefined;
 
-// Get comments for a specific file
-app.get('/api/comments/:filename', async (req, res) => {
-  try {
-    const db = await readComments();
-    const comments = db.comments.filter(
-      c => c.markdownFile === req.params.filename
-    );
-    res.json(comments);
+    if (markdownFile) {
+      res.json(db.comments.filter(comment => comment.markdownFile === markdownFile));
+      return;
+    }
+
+    res.json(db.comments);
   } catch (error) {
     res.status(500).json({ error: 'Failed to read comments' });
   }
@@ -208,7 +264,7 @@ app.post('/api/render', async (req, res) => {
       return;
     }
     
-    const mdPath = path.join(DATA_DIR, markdownFile);
+    const mdPath = resolveContentPath(markdownFile);
     
     // Check if file exists
     try {
@@ -222,7 +278,7 @@ app.post('/api/render', async (req, res) => {
     const pandocArgs = [mdPath, '-f', 'markdown', '-t', 'html'];
     
     if (bibFile) {
-      const bibPath = path.join(DATA_DIR, bibFile);
+      const bibPath = resolveContentPath(bibFile);
       try {
         await fs.access(bibPath);
         pandocArgs.push('--citeproc', '--bibliography=' + bibPath);
@@ -249,9 +305,16 @@ app.post('/api/render', async (req, res) => {
 });
 
 // Get markdown file content
-app.get('/api/markdown/:filename', async (req, res) => {
+app.get('/api/markdown', async (req, res) => {
   try {
-    const mdPath = path.join(DATA_DIR, req.params.filename);
+    const filename = typeof req.query.filename === 'string' ? req.query.filename : '';
+
+    if (!filename) {
+      res.status(400).json({ error: 'filename is required' });
+      return;
+    }
+
+    const mdPath = resolveContentPath(filename);
     const content = await fs.readFile(mdPath, 'utf-8');
     res.json({ content });
   } catch (error) {
@@ -262,9 +325,8 @@ app.get('/api/markdown/:filename', async (req, res) => {
 // List available markdown files
 app.get('/api/files', async (_req, res) => {
   try {
-    const files = await fs.readdir(DATA_DIR);
-    const mdFiles = files.filter(f => f.endsWith('.md'));
-    res.json(mdFiles);
+    const mdFiles = await listMarkdownFiles(CONTENT_DIR);
+    res.json(sortMarkdownFiles(mdFiles));
   } catch (error) {
     res.status(500).json({ error: 'Failed to list files' });
   }
@@ -273,11 +335,10 @@ app.get('/api/files', async (_req, res) => {
 // Git sync endpoint
 app.post('/api/sync', requireAuth, async (req, res) => {
   // Check git configuration before acquiring lock
-  const gitRepoUrl = process.env.GIT_REPO_URL;
   const gitUsername = process.env.GIT_USERNAME;
   const gitAccessToken = process.env.GIT_ACCESS_TOKEN;
   
-  if (!gitRepoUrl || !gitUsername || !gitAccessToken) {
+  if (!GIT_REPO_URL || !gitUsername || !gitAccessToken) {
     res.status(400).json({ 
       error: 'Git sync not configured. Please set GIT_REPO_URL, GIT_USERNAME, and GIT_ACCESS_TOKEN environment variables.' 
     });
@@ -299,38 +360,38 @@ app.post('/api/sync', requireAuth, async (req, res) => {
     
     // Configure git user if not already configured
     try {
-      await execAsync('git config user.email', { cwd: DATA_DIR });
+      await execAsync('git config user.email', { cwd: CONTENT_DIR });
     } catch {
-      await execAsync('git config user.email "markdown-co-editor@automated"', { cwd: DATA_DIR });
-      await execAsync('git config user.name "Markdown Co-Editor"', { cwd: DATA_DIR });
+      await execAsync('git config user.email "markdown-co-editor@automated"', { cwd: CONTENT_DIR });
+      await execAsync('git config user.name "Markdown Co-Editor"', { cwd: CONTENT_DIR });
     }
     
     // Check if git repo is initialized
     let needsRemote = false;
     try {
-      await execAsync('git rev-parse --git-dir', { cwd: DATA_DIR });
+      await execAsync('git rev-parse --git-dir', { cwd: CONTENT_DIR });
       // Check if remote exists
       try {
-        await execAsync('git remote get-url origin', { cwd: DATA_DIR });
+        await execAsync('git remote get-url origin', { cwd: CONTENT_DIR });
       } catch {
         needsRemote = true;
       }
     } catch {
       // Initialize git repo if not exists
-      await execAsync('git init', { cwd: DATA_DIR });
+      await execAsync('git init', { cwd: CONTENT_DIR });
       needsRemote = true;
     }
     
     // Add remote if needed (without credentials in URL)
     if (needsRemote) {
-      await execAsync(`git remote add origin ${gitRepoUrl}`, { cwd: DATA_DIR });
+      await execAsync(`git remote add origin ${GIT_REPO_URL}`, { cwd: CONTENT_DIR });
     }
     
     // Stage changes
-    await execAsync('git add comments.json', { cwd: DATA_DIR });
+    await execAsync('git add comments.json', { cwd: CONTENT_DIR });
     
     // Check if there are changes to commit
-    const { stdout: statusOutput } = await execAsync('git status --porcelain', { cwd: DATA_DIR });
+    const { stdout: statusOutput } = await execAsync('git status --porcelain', { cwd: CONTENT_DIR });
     
     if (!statusOutput.trim()) {
       res.json({ 
@@ -347,10 +408,10 @@ app.post('/api/sync', requireAuth, async (req, res) => {
     const commitMessage = `Update comments by ${userEmail} at ${timestamp}`;
     
     // Commit changes with properly escaped message
-    await execAsync('git commit -m ' + JSON.stringify(commitMessage), { cwd: DATA_DIR });
+    await execAsync('git commit -m ' + JSON.stringify(commitMessage), { cwd: CONTENT_DIR });
     
     // Detect the current branch name
-    const { stdout: branchOutput } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: DATA_DIR });
+    const { stdout: branchOutput } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: CONTENT_DIR });
     const currentBranch = branchOutput.trim() || 'main';
     
     // Use environment variables for git credentials (more secure than files)
@@ -363,13 +424,13 @@ app.post('/api/sync', requireAuth, async (req, res) => {
     };
     
     // Construct authenticated URL for push
-    const urlParts = gitRepoUrl.replace('https://', '').split('/');
+    const urlParts = GIT_REPO_URL.replace('https://', '').split('/');
     const authenticatedUrl = `https://${gitUsername}:${gitAccessToken}@${urlParts.join('/')}`;
     
     // Push changes using the authenticated URL directly in command
     // Note: This is still visible in process list, but is necessary for non-interactive push
     await execAsync(`git push ${authenticatedUrl} HEAD:${currentBranch}`, { 
-      cwd: DATA_DIR,
+      cwd: CONTENT_DIR,
       env: gitEnv 
     });
     
@@ -392,12 +453,11 @@ app.post('/api/sync', requireAuth, async (req, res) => {
 
 // Periodic git pull function
 async function performGitPull(): Promise<void> {
-  const gitRepoUrl = process.env.GIT_REPO_URL;
   const gitUsername = process.env.GIT_USERNAME;
   const gitAccessToken = process.env.GIT_ACCESS_TOKEN;
   
   // Skip if git is not configured
-  if (!gitRepoUrl || !gitUsername || !gitAccessToken) {
+  if (!GIT_REPO_URL || !gitUsername || !gitAccessToken) {
     return;
   }
   
@@ -410,7 +470,7 @@ async function performGitPull(): Promise<void> {
   try {
     // Check if git repo is initialized
     try {
-      await execAsync('git rev-parse --git-dir', { cwd: DATA_DIR });
+      await execAsync('git rev-parse --git-dir', { cwd: CONTENT_DIR });
     } catch {
       // Git repo not initialized, skip pull
       return;
@@ -419,15 +479,15 @@ async function performGitPull(): Promise<void> {
     console.log('Performing automatic git pull...');
     
     // Construct authenticated URL for pull
-    const urlParts = gitRepoUrl.replace('https://', '').split('/');
+    const urlParts = GIT_REPO_URL.replace('https://', '').split('/');
     const authenticatedUrl = `https://${gitUsername}:${gitAccessToken}@${urlParts.join('/')}`;
     
     // Detect the current branch name
-    const { stdout: branchOutput } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: DATA_DIR });
+    const { stdout: branchOutput } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: CONTENT_DIR });
     const currentBranch = branchOutput.trim() || 'main';
     
     // Pull changes from remote
-    const { stdout, stderr } = await execAsync(`git pull ${authenticatedUrl} ${currentBranch}`, { cwd: DATA_DIR });
+    const { stdout, stderr } = await execAsync(`git pull ${authenticatedUrl} ${currentBranch}`, { cwd: CONTENT_DIR });
     
     if (stdout.includes('Already up to date') || stdout.includes('Already up-to-date')) {
       console.log('Git pull: Already up to date');
@@ -460,16 +520,18 @@ async function startServer() {
   
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
-    console.log(`Data directory: ${DATA_DIR}`);
+    console.log(`Content directory: ${CONTENT_DIR}`);
     
     // Log git pull interval if configured
-    if (process.env.GIT_REPO_URL && process.env.GIT_USERNAME && process.env.GIT_ACCESS_TOKEN) {
+    if (GIT_REPO_URL && process.env.GIT_USERNAME && process.env.GIT_ACCESS_TOKEN) {
       console.log(`Git auto-pull enabled: every ${GIT_PULL_INTERVAL / 1000} seconds`);
+    } else {
+      console.log(`Fallback sample content enabled from ${FALLBACK_DATA_DIR}`);
     }
   });
   
   // Watch for file changes
-  const watcher = chokidar.watch(DATA_DIR, {
+  const watcher = chokidar.watch(CONTENT_DIR, {
     persistent: true,
     ignoreInitial: true,
   });
@@ -479,7 +541,7 @@ async function startServer() {
   });
   
   // Start periodic git pull if configured
-  if (process.env.GIT_REPO_URL && process.env.GIT_USERNAME && process.env.GIT_ACCESS_TOKEN) {
+  if (GIT_REPO_URL && process.env.GIT_USERNAME && process.env.GIT_ACCESS_TOKEN) {
     // Initial pull on startup (await to prevent race condition with interval)
     await performGitPull().catch(err => console.error('Initial git pull failed:', err));
     
