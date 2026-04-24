@@ -21,8 +21,8 @@ RUN npm run build
 # Production stage
 FROM node:20-alpine
 
-# Install pandoc
-RUN apk add --no-cache pandoc
+# Install runtime tools used by the server
+RUN apk add --no-cache pandoc git
 
 WORKDIR /app
 

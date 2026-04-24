@@ -136,6 +136,7 @@ npm run dev
    - ヘッダーの「Sync」ボタンをクリック
    - `content/comments.json`の変更が自動的にコミットされ、リモートリポジトリにプッシュされる
    - 同期が成功すると、成功メッセージが表示される
+   - Docker運用では、`git`を含む更新後イメージを使うために `docker compose build` または `docker compose up --build -d` を一度実行してください
 
 4. **自動プル機能**：
    - サーバーは定期的にリモートリポジトリから変更をプルします
